@@ -1,0 +1,256 @@
+Excellent. You have completed the **entire Day 1 foundation**.
+
+At this point your bot can:
+
+✅ Join Discord
+✅ Go online
+✅ Use slash commands
+✅ Store user data
+✅ Remember user preferences
+✅ Let users customize settings
+
+Now we start **Day 2: Roblox Data Integration.**
+
+The goal for Day 2:
+
+> Make the bot able to look at Roblox games and return useful information.
+
+By the end of today, you should be able to do:
+
+```
+/game [game_id]
+```
+
+and get:
+
+```
+🎮 Game Information
+
+Name:
+Example Game
+
+Creator:
+Example Studio
+
+Players:
+5,000
+
+Visits:
+2,300,000
+
+Favorites:
+120,000
+
+Created:
+June 2026
+```
+
+---
+
+# DAY 2 — Step 1: Create Roblox API System
+
+Create a new file:
+
+```
+roblox_api.py
+```
+
+This file will handle all Roblox communication.
+
+Your structure becomes:
+
+```
+Roblox-Game-Scout-Bot
+
+main.py
+database.py
+roblox_api.py   ← NEW
+commands.py
+scanner.py
+utils.py
+.env
+```
+
+---
+
+# Step 2 — Install Requests
+
+In Replit Shell:
+
+```
+pip install requests
+```
+
+(You may already have it from earlier.)
+
+---
+
+# Step 3 — Add Roblox API Code
+
+Open:
+
+```
+roblox_api.py
+```
+
+Paste:
+
+```python
+import requests
+
+
+def get_game_info(place_id):
+
+    url = f"https://games.roblox.com/v1/games?universeIds={place_id}"
+
+    response = requests.get(url)
+
+    if response.status_code != 200:
+        return None
+
+    data = response.json()
+
+    if not data["data"]:
+        return None
+
+    game = data["data"][0]
+
+    return {
+        "name": game["name"],
+        "playing": game["playing"],
+        "visits": game["visits"],
+        "favorites": game["favoritedCount"],
+        "creator": game["creator"]["name"]
+    }
+```
+
+---
+
+# Step 4 — Test the Roblox Connection
+
+Before adding Discord commands, we test the API.
+
+Create a temporary file:
+
+```
+test.py
+```
+
+Paste:
+
+```python
+from roblox_api import get_game_info
+
+game = get_game_info(2788229376)
+
+print(game)
+```
+
+Run:
+
+```
+python test.py
+```
+
+You should see something like:
+
+```
+{
+'name': '...',
+'playing': 1234,
+'visits': 5000000,
+'favorites': 200000,
+'creator': '...'
+}
+```
+
+---
+
+# Step 5 — Remove test.py
+
+Once it works:
+
+Delete:
+
+```
+test.py
+```
+
+We don't need it anymore.
+
+---
+
+# Step 6 — Add `/game` Command
+
+Now your Discord bot can use Roblox data.
+
+Add:
+
+```python
+@bot.tree.command(name="game", description="Get Roblox game information")
+async def game(interaction: discord.Interaction, place_id: str):
+
+    from roblox_api import get_game_info
+
+    data = get_game_info(place_id)
+
+    if data is None:
+        await interaction.response.send_message(
+            "Could not find that Roblox game."
+        )
+        return
+
+    await interaction.response.send_message(
+        f"""
+🎮 {data['name']}
+
+👥 Players:
+{data['playing']:,}
+
+👀 Visits:
+{data['visits']:,}
+
+⭐ Favorites:
+{data['favorites']:,}
+
+👤 Creator:
+{data['creator']}
+"""
+    )
+```
+
+---
+
+# Step 7 — Test
+
+Restart bot.
+
+In Discord:
+
+```
+/game
+```
+
+Enter:
+
+```
+2788229376
+```
+
+(Example Roblox place ID.)
+
+---
+
+## Day 2 Progress Tracker
+
+After these steps:
+
+✅ Roblox API connected
+⬜ `/game` command works
+⬜ Search multiple games
+⬜ Create scanner
+⬜ Create scoring system
+
+---
+
+One important thing: we are starting with **place IDs** because Roblox's discovery APIs are more complicated. Once this works, we upgrade it into an actual **automatic scout** that finds games without you entering IDs. That is where RoTrends and trend scoring come in.

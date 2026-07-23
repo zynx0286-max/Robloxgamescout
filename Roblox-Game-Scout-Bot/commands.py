@@ -1,6 +1,7 @@
 import discord
 from discord import app_commands
 from database import add_user, get_user, update_user
+from roblox_api import get_game_info
 
 
 def setup_commands(tree: app_commands.CommandTree):
@@ -76,5 +77,34 @@ Minimum Players:
 
 Genre:
 {data[3]}
+"""
+        )
+
+    @tree.command(name="game", description="Get Roblox game information")
+    @app_commands.describe(place_id="Roblox game Universe ID")
+    async def game(interaction: discord.Interaction, place_id: str):
+        data = get_game_info(place_id)
+
+        if data is None:
+            await interaction.response.send_message(
+                "Could not find that Roblox game."
+            )
+            return
+
+        await interaction.response.send_message(
+            f"""
+🎮 {data['name']}
+
+👥 Players:
+{data['playing']:,}
+
+👀 Visits:
+{data['visits']:,}
+
+⭐ Favorites:
+{data['favorites']:,}
+
+👤 Creator:
+{data['creator']}
 """
         )
