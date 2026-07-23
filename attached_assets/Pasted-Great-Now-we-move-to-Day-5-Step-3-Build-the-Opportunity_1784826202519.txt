@@ -1,0 +1,270 @@
+Great. Now we move to **Day 5 — Step 3: Build the Opportunity Report System.**
+
+This is where your bot stops just saying:
+
+> "Here are some games"
+
+and starts saying:
+
+> "Here are games worth paying attention to and why."
+
+---
+
+# Step 3 — Create Opportunity Analyzer
+
+Create a new file:
+
+```text
+opportunity.py
+```
+
+Your structure:
+
+```text
+Roblox-Game-Scout-Bot
+
+main.py
+database.py
+roblox_api.py
+scanner.py
+trend.py
+growth.py
+rotrends.py
+opportunity.py  ← NEW
+```
+
+---
+
+## Step 3.1 — Add Analysis Logic
+
+Open:
+
+```text
+opportunity.py
+```
+
+Paste:
+
+```python
+def analyze_game(game):
+
+    reasons = []
+
+    score = game.get("score", 0)
+    trend = game.get("trend_score", 0)
+    growth = game.get("growth", 0)
+
+
+    if trend >= 80:
+        reasons.append(
+            "🔥 Strong trending activity"
+        )
+
+
+    if growth >= 100:
+        reasons.append(
+            "📈 Extremely fast player growth"
+        )
+
+    elif growth >= 50:
+        reasons.append(
+            "📈 Positive player growth"
+        )
+
+
+    if game.get("source") == "RoTrends":
+        reasons.append(
+            "🌐 Found through RoTrends"
+        )
+
+
+    if game["playing"] >= 5000:
+        reasons.append(
+            "👥 High active player count"
+        )
+
+
+    if not reasons:
+        reasons.append(
+            "📊 Normal activity"
+        )
+
+
+    return reasons
+```
+
+---
+
+# Step 3.2 — Add Opportunity Rating
+
+Add below it:
+
+```python
+def get_opportunity_level(game):
+
+    score = game.get("score", 0)
+    trend = game.get("trend_score", 0)
+
+
+    total = score + trend
+
+
+    if total >= 150:
+        return "🔥 HIGH OPPORTUNITY"
+
+
+    elif total >= 90:
+        return "📈 WATCHLIST"
+
+
+    else:
+        return "⚪ NORMAL"
+```
+
+---
+
+Now your bot can classify games:
+
+```text
+🔥 HIGH OPPORTUNITY
+
+or
+
+📈 WATCHLIST
+
+or
+
+⚪ NORMAL
+```
+
+---
+
+# Step 3.3 — Update Discord Embed
+
+Open:
+
+```text
+embeds.py
+```
+
+Import:
+
+```python
+from opportunity import analyze_game, get_opportunity_level
+```
+
+Inside:
+
+```python
+create_game_embed()
+```
+
+Add:
+
+```python
+embed.add_field(
+    name="Opportunity",
+    value=get_opportunity_level(game),
+    inline=False
+)
+
+
+embed.add_field(
+    name="Why Found",
+    value="\n".join(
+        analyze_game(game)
+    ),
+    inline=False
+)
+```
+
+---
+
+# Step 3.4 — Test
+
+Restart your bot.
+
+Run:
+
+```text
+/scan
+```
+
+Now your output should look closer to:
+
+```text
+🎮 Mining Simulator
+
+🔥 HIGH OPPORTUNITY
+
+
+📊 Stats
+
+Players:
+4,500
+
+Growth:
++140%
+
+Trend:
+91/100
+
+
+Why Found:
+
+🔥 Strong trending activity
+📈 Extremely fast player growth
+🌐 Found through RoTrends
+👥 High active player count
+```
+
+---
+
+# What You Added
+
+Your bot now has:
+
+✅ Data collection
+✅ Trend scoring
+✅ Growth tracking
+✅ Opportunity ranking
+✅ Human-readable explanations
+
+This is the first feature that makes it useful for actual decision-making.
+
+---
+
+## Next Step:
+
+**Day 5 — Step 4: Developer Intelligence System**
+
+We will add:
+
+* Creator information
+* Group information
+* Developer history
+* Other games by the creator
+* "Is this developer worth contacting?"
+
+Example:
+
+```text
+👤 Developer Analysis
+
+Creator:
+Example Studios
+
+Previous Games:
+3
+
+Average Players:
+8,000
+
+Developer Score:
+82/100
+
+Recommendation:
+Contact developer
+```
+
+This is the feature that turns it from a trend tracker into a **Roblox opportunity scouting tool**.

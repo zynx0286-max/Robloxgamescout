@@ -1,27 +1,37 @@
+import time
 import requests
 
 
-def get_game_info(place_id):
+def get_game_info(place_id, retries=3, delay=0.5):
+    """Fetch Roblox game info with retries."""
     url = f"https://games.roblox.com/v1/games?universeIds={place_id}"
 
-    response = requests.get(url)
+    for attempt in range(retries):
+        try:
+            response = requests.get(url, timeout=10)
 
-    if response.status_code != 200:
-        return None
+            if response.status_code == 200:
+                data = response.json()
+                if data["data"]:
+                    game = data["data"][0]
+                    return {
+                        "id": place_id,
+                        "place_id": game.get("rootPlaceId", place_id),
+                        "name": game["name"],
+                        "playing": game["playing"],
+                        "visits": game["visits"],
+                        "favorites": game["favoritedCount"],
+                        "creator": game["creator"]["name"]
+                    }
 
-    data = response.json()
+            if response.status_code == 429:
+                time.sleep(delay * (attempt + 1))
+                continue
 
-    if not data["data"]:
-        return None
+        except Exception:
+            pass
 
-    game = data["data"][0]
+        if attempt < retries - 1:
+            time.sleep(delay)
 
-    return {
-        "id": place_id,
-        "place_id": game.get("rootPlaceId", place_id),
-        "name": game["name"],
-        "playing": game["playing"],
-        "visits": game["visits"],
-        "favorites": game["favoritedCount"],
-        "creator": game["creator"]["name"]
-    }
+    return None

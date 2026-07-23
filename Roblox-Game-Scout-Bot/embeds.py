@@ -1,5 +1,6 @@
 import discord
 from categories import get_category
+from opportunity import analyze_game, get_opportunity_level
 
 
 def create_game_embed(game):
@@ -14,6 +15,12 @@ def create_game_embed(game):
         description=f"{category}  |  Source: {game.get('source', 'Unknown')}",
         color=discord.Color.green(),
         url=f"https://www.roblox.com/games/{place_id}",
+    )
+
+    embed.add_field(
+        name="Opportunity",
+        value=get_opportunity_level(game),
+        inline=False
     )
 
     embed.add_field(
@@ -50,6 +57,12 @@ def create_game_embed(game):
         name="🌐 Game Link",
         value=f"[Open on Roblox](https://www.roblox.com/games/{place_id})",
         inline=True
+    )
+
+    embed.add_field(
+        name="Why Found",
+        value="\n".join(analyze_game(game)),
+        inline=False
     )
 
     embed.set_footer(text=f"Universe ID: {game['id']} | Place ID: {place_id}")
