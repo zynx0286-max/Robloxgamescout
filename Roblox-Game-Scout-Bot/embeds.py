@@ -7,11 +7,13 @@ def create_game_embed(game):
     category = get_category(game)
     growth = game.get("growth", 0)
     growth_text = f"+{growth}%" if growth > 0 else f"{growth}%"
+    place_id = game.get("place_id", game["id"])
 
     embed = discord.Embed(
         title=f"🎮 {game['name']}",
         description=f"{category}  |  Source: {game.get('source', 'Unknown')}",
         color=discord.Color.green(),
+        url=f"https://www.roblox.com/games/{place_id}",
     )
 
     embed.add_field(
@@ -46,10 +48,10 @@ def create_game_embed(game):
 
     embed.add_field(
         name="🌐 Game Link",
-        value=f"[Open on Roblox](https://www.roblox.com/games/{game['id']})",
+        value=f"[Open on Roblox](https://www.roblox.com/games/{place_id})",
         inline=True
     )
 
-    embed.set_footer(text=f"Universe ID: {game['id']}")
+    embed.set_footer(text=f"Universe ID: {game['id']} | Place ID: {place_id}")
 
     return embed

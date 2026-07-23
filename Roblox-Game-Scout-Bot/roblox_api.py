@@ -18,6 +18,7 @@ def get_game_info(place_id):
 
     return {
         "id": place_id,
+        "place_id": game.get("rootPlaceId", place_id),
         "name": game["name"],
         "playing": game["playing"],
         "visits": game["visits"],
