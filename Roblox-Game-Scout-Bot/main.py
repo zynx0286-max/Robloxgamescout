@@ -1,29 +1,26 @@
 import discord
 from discord.ext import commands
-from config import TOKEN, PREFIX
-from database import init_db
+import os
+from dotenv import load_dotenv
+
+load_dotenv()
+
+TOKEN = os.getenv("DISCORD_TOKEN")
 
 intents = discord.Intents.default()
 intents.message_content = True
 
-bot = commands.Bot(command_prefix=PREFIX, intents=intents)
+bot = commands.Bot(
+    command_prefix="!",
+    intents=intents
+)
 
 @bot.event
 async def on_ready():
-    print(f"Logged in as {bot.user} (ID: {bot.user.id})")
-    print("------")
-    await init_db()
+    print(f"Logged in as {bot.user}")
 
-# Load commands cog
-async def load_extensions():
-    await bot.load_extension("commands")
+@bot.command()
+async def hello(ctx):
+    await ctx.send("Roblox Game Scout Bot is online!")
 
-import asyncio
-
-async def main():
-    async with bot:
-        await load_extensions()
-        await bot.start(TOKEN)
-
-if __name__ == "__main__":
-    asyncio.run(main())
+bot.run(TOKEN)
