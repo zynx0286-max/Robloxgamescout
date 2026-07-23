@@ -6,7 +6,8 @@ def passes_filters(game, settings):
     if game["playing"] < settings["minimum_players"]:
         return False
 
-    if game.get("growth", 0) < settings["minimum_growth"]:
+    # Only enforce a growth floor when the user actually set one above 0.
+    if settings["minimum_growth"] > 0 and game.get("growth", 0) < settings["minimum_growth"]:
         return False
 
     return True
