@@ -1,0 +1,248 @@
+Great. Before moving on, you now have a **real foundation**:
+
+✅ Discord bot
+✅ Roblox data collection
+✅ Database
+✅ Game scoring
+✅ Trend scoring
+✅ Discord embeds
+✅ Save-game foundation
+
+Now we are going to adjust the roadmap slightly and do the thing you asked about earlier:
+
+# DAY 5 — Step 1: Real RoTrends Integration
+
+This is important because your bot's purpose is **finding opportunities**, not just listing popular games.
+
+---
+
+# Step 1 — Create the RoTrends Module
+
+Create:
+
+```text
+rotrends.py
+```
+
+Your structure:
+
+```text
+Roblox-Game-Scout-Bot
+
+main.py
+database.py
+roblox_api.py
+scanner.py
+trend.py
+growth.py
+filters.py
+embeds.py
+buttons.py
+rotrends.py  ← NEW
+```
+
+---
+
+# Step 2 — Add Basic RoTrends Connector
+
+Open:
+
+```text
+rotrends.py
+```
+
+Add:
+
+```python
+import requests
+from bs4 import BeautifulSoup
+
+
+def get_rotrends_games():
+
+    url = "https://rotrends.com"
+
+    response = requests.get(
+        url,
+        headers={
+            "User-Agent": "Mozilla/5.0"
+        }
+    )
+
+    if response.status_code != 200:
+        return []
+
+
+    soup = BeautifulSoup(
+        response.text,
+        "html.parser"
+    )
+
+
+    games = []
+
+
+    # Placeholder:
+    # We will extract trending games here
+
+
+    return games
+```
+
+---
+
+# Step 3 — Install BeautifulSoup
+
+In Replit Shell:
+
+```bash
+pip install beautifulsoup4
+```
+
+This lets Python read website information.
+
+---
+
+# Step 4 — Create a Test
+
+Create:
+
+```text
+test_rotrends.py
+```
+
+Add:
+
+```python
+from rotrends import get_rotrends_games
+
+
+games = get_rotrends_games()
+
+print(games)
+```
+
+Run:
+
+```bash
+python test_rotrends.py
+```
+
+Expected:
+
+```text
+[]
+```
+
+That is okay.
+
+Right now we are only making sure the connection works.
+
+---
+
+# Step 5 — Add RoTrends Into Your Data Pipeline
+
+Open:
+
+```text
+data_collector.py
+```
+
+Change:
+
+```python
+from rotrends import get_trending_games
+```
+
+to:
+
+```python
+from rotrends import get_rotrends_games
+```
+
+Then:
+
+```python
+def collect_games():
+
+    games = []
+
+    games.extend(
+        search_games()
+    )
+
+    games.extend(
+        get_rotrends_games()
+    )
+
+    return games
+```
+
+Now your bot has:
+
+```
+Roblox Discovery
+        +
+RoTrends
+        ↓
+Data Collector
+        ↓
+Scanner
+        ↓
+Score
+```
+
+---
+
+# Step 6 — Add Source Labels
+
+Update your game data format:
+
+Example:
+
+```python
+{
+"name": "Example Simulator",
+"source": "RoTrends",
+"trend_score": 90
+}
+```
+
+Later the bot can explain:
+
+```
+Found because:
+
+🔥 Trending on RoTrends
+📈 Player growth increasing
+⭐ Strong engagement
+```
+
+---
+
+## Important Note
+
+At this stage, do **not** scrape everything from RoTrends yet.
+
+The next step after this is building a proper extractor that finds:
+
+* Game name
+* Roblox link
+* Player count
+* Rank position
+* Trend category
+
+We test the connection first, then extract.
+
+---
+
+Your next checkpoint:
+
+When finished, you should have:
+
+✅ `rotrends.py` created
+✅ BeautifulSoup installed
+✅ Test file runs
+✅ Data collector includes RoTrends
+
+After that we move to **Step 2: Extracting actual trending games from RoTrends.**

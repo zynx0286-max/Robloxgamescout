@@ -1,5 +1,5 @@
 from game_search import search_games
-from rotrends import get_trending_games
+from rotrends import get_rotrends_games
 
 
 def collect_games():
@@ -12,7 +12,7 @@ def collect_games():
         games.append(game)
 
     # Trend sources
-    for game in get_trending_games():
+    for game in get_rotrends_games():
         game["source"] = game.get("source", "RoTrends")
         games.append(game)
 
