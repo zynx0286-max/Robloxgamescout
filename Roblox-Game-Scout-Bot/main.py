@@ -22,10 +22,17 @@ class MyBot(discord.Client):
 
         if GUILD_ID:
             guild = discord.Object(id=int(GUILD_ID))
+
+            # Sync commands to your test server
             self.tree.clear_commands(guild=guild)
             self.tree.copy_global_to(guild=guild)
             await self.tree.sync(guild=guild)
             print(f"Slash commands synced to test server: {GUILD_ID}")
+
+            # Clear old global commands so they don't show as duplicates
+            self.tree.clear_commands(guild=None)
+            await self.tree.sync()
+            print("Old global commands cleared")
         else:
             await self.tree.sync()
             print("Slash commands synced globally")
