@@ -1,0 +1,20 @@
+~/workspace/Roblox-Game-Scout-Bot$ cd /home/runner/workspace/Roblox-Game-Scout-Bot && pip install requests
+Looking in indexes: http://package-firewall.replit.local/pypi/simple/
+Collecting requests
+  Downloading http://package-firewall.replit.local/pypi/packages/a0/f4/c67b0b3f1b9245e8d266f0f112c500d50e5b4e83cb6f3b71b6528104182a/requests-2.34.2-py3-none-any.whl.metadata (4.8 kB)
+Collecting charset_normalizer<4,>=2 (from requests)
+  Downloading http://package-firewall.replit.local/pypi/packages/a5/34/49b9060e8418b14fb5cba9cf6bfb383111e2538a03a1fb18e66a95aeb3d5/charset_normalizer-3.4.9-cp311-cp311-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl.metadata (41 kB)
+Requirement already satisfied: idna<4,>=2.5 in /home/runner/workspace/.pythonlibs/lib/python3.11/site-packages (from requests) (3.18)
+Collecting urllib3<3,>=1.26 (from requests)
+  Downloading http://package-firewall.replit.local/pypi/packages/7f/3e/5db95bcf282c52709639744ca2a8b149baccf648e39c8cc87553df9eae0c/urllib3-2.7.0-py3-none-any.whl.metadata (6.9 kB)
+Collecting certifi>=2023.5.7 (from requests)
+  Downloading http://package-firewall.replit.local/pypi/packages/0b/a7/71ac2cff56fec219ed242bb11b8efb69fcc4bec75db06fb7bfe35de520e6/certifi-2026.7.22-py3-none-any.whl.metadata (2.5 kB)
+Downloading http://package-firewall.replit.local/pypi/packages/a0/f4/c67b0b3f1b9245e8d266f0f112c500d50e5b4e83cb6f3b71b6528104182a/requests-2.34.2-py3-none-any.whl (73 kB)
+Downloading http://package-firewall.replit.local/pypi/packages/0b/a7/71ac2cff56fec219ed242bb11b8efb69fcc4bec75db06fb7bfe35de520e6/certifi-2026.7.22-py3-none-any.whl (136 kB)
+Downloading http://package-firewall.replit.local/pypi/packages/a5/34/49b9060e8418b14fb5cba9cf6bfb383111e2538a03a1fb18e66a95aeb3d5/charset_normalizer-3.4.9-cp311-cp311-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl (221 kB)
+Downloading http://package-firewall.replit.local/pypi/packages/7f/3e/5db95bcf282c52709639744ca2a8b149baccf648e39c8cc87553df9eae0c/urllib3-2.7.0-py3-none-any.whl (131 kB)
+Installing collected packages: urllib3, charset_normalizer, certifi, requests
+Successfully installed certifi-2026.7.22 charset_normalizer-3.4.9 requests-2.34.2 urllib3-2.7.0
+~/workspace/Roblox-Game-Scout-Bot$ cd /home/runner/workspace/Roblox-Game-Scout-Bot && python test.py
+{'name': "calebegamer2346616's Place", 'playing': 0, 'visits': 729, 'favorites': 795, 'creator': 'calebegamer2346616'}
+~/workspace/Roblox-Game-Scout-Bot$ 
