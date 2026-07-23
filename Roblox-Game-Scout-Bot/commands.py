@@ -3,13 +3,16 @@ from discord import app_commands
 from database import add_user, get_user, update_user
 from roblox_api import get_game_info
 from scanner import calculate_score, scan_games
+from categories import get_category
 
 
 def _reasons(game):
     """Build a list of positive signals for a game."""
     reasons = []
     if game.get("growth", 0) >= 50:
-        reasons.append("✅ Fast player growth")
+        reasons.append("✅ Fast growth")
+    if game.get("trend_score", 0) >= 80:
+        reasons.append("✅ Trending strongly")
     if game["playing"] >= 1000:
         reasons.append("✅ High activity")
     if game["visits"] >= 1000000:
@@ -19,6 +22,22 @@ def _reasons(game):
     if not reasons:
         reasons.append("ℹ️ Low activity right now")
     return "\n".join(reasons)
+
+
+def _format_game_message(index, game):
+    """Format a single game result message."""
+    growth = game.get("growth", 0)
+    growth_text = f"+{growth}%" if growth > 0 else f"{growth}%"
+    category = get_category(game)
+
+    return (
+        f"**{index}. {game['name']}**\n\n"
+        f"👥 Players:\n{game['playing']:,}\n\n"
+        f"📈 Growth:\n{growth_text}\n\n"
+        f"🔥 Trend Score:\n{game.get('trend_score', 0)}/100\n\n"
+        f"⭐ Category:\n{category}\n\n"
+        f"📝 Why:\n{_reasons(game)}"
+    )
 
 
 def setup_commands(tree: app_commands.CommandTree):
@@ -190,15 +209,33 @@ Scanning...
             return
 
         for index, game in enumerate(results[:5], start=1):
+            await interaction.followup.send(_format_game_message(index, game))
+
+    @tree.command(name="trending", description="Show only high-trend games")
+    async def trending(interaction: discord.Interaction):
+        await interaction.response.send_message(
+            "🔥 Finding trending Roblox games..."
+        )
+
+        results = scan_games()
+        trending_games = [g for g in results if g.get("trend_score", 0) > 80]
+
+        if not trending_games:
+            await interaction.followup.send(
+                "No games are trending above 80/100 right now. Try `/scan` for all results."
+            )
+            return
+
+        message = "🔥 **Trending Roblox Games**\n\n"
+
+        for index, game in enumerate(trending_games[:5], start=1):
             growth = game.get("growth", 0)
             growth_text = f"+{growth}%" if growth > 0 else f"{growth}%"
 
-            message = (
+            message += (
                 f"**{index}. {game['name']}**\n\n"
-                f"👥 Players:\n{game['playing']:,}\n\n"
-                f"📈 Growth:\n{growth_text}\n\n"
-                f"⭐ Score:\n{game['score']}/100\n\n"
-                f"📝 Why:\n{_reasons(game)}"
+                f"Trend: {game.get('trend_score', 0)}/100\n"
+                f"Growth: {growth_text}\n\n"
             )
 
-            await interaction.followup.send(message)
+        await interaction.followup.send(message)

@@ -2,6 +2,7 @@ from game_search import search_games
 from roblox_api import get_game_info
 from database import save_game_snapshot
 from growth import get_growth
+from trend import calculate_trend_score
 from filters import passes_filters
 
 
@@ -27,8 +28,7 @@ def calculate_score(game):
         score += 10
 
     # Growth trend
-    growth = get_growth(game["id"])
-    game["growth"] = growth
+    growth = game.get("growth", 0)
 
     if growth >= 100:
         score += 30
@@ -68,6 +68,11 @@ def scan_games(user_settings=None):
 
         if info:
             save_game_snapshot(info)
+
+            growth = get_growth(info["id"])
+            info["growth"] = growth
+            info["trend_score"] = calculate_trend_score(info, growth)
+
             if passes_filters(info, user_settings):
                 found_games.append(info)
 
