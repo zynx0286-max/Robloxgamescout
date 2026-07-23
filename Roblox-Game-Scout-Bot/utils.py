@@ -3,6 +3,21 @@ import discord
 from config import ROBLOX_API_BASE, ROBLOX_THUMBNAILS_API, MIN_ACTIVE_PLAYERS
 
 
+def remove_duplicates(games):
+    """Remove duplicate games by name (or id fallback) while preserving order."""
+    seen = set()
+    unique = []
+
+    for game in games:
+        key = game.get("name") or str(game.get("id"))
+
+        if key and key not in seen:
+            seen.add(key)
+            unique.append(game)
+
+    return unique
+
+
 async def search_roblox_games(query: str, limit: int = 5) -> list[dict]:
     """Search Roblox for games matching *query* and return up to *limit* results."""
     url = f"{ROBLOX_API_BASE}/games/list"

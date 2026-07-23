@@ -1,0 +1,289 @@
+Nice. Now we move to **Day 5 — Step 2: Extract Actual RoTrends Data.**
+
+Right now your RoTrends file can connect, but it returns:
+
+```python
+[]
+```
+
+because we haven't told it what information to collect.
+
+The goal:
+
+RoTrends:
+
+```text
+↓
+Game Name
+↓
+Game ID
+↓
+Rank
+↓
+Trend Position
+```
+
+Then your bot can use it in scoring.
+
+---
+
+# Step 2.1 — Improve `rotrends.py`
+
+Open:
+
+```text
+rotrends.py
+```
+
+Replace the code with:
+
+```python
+import requests
+from bs4 import BeautifulSoup
+
+
+def get_rotrends_games():
+
+    url = "https://rotrends.com"
+
+    response = requests.get(
+        url,
+        headers={
+            "User-Agent": "Mozilla/5.0"
+        }
+    )
+
+    if response.status_code != 200:
+        return []
+
+
+    soup = BeautifulSoup(
+        response.text,
+        "html.parser"
+    )
+
+
+    games = []
+
+
+    # Find links that lead to Roblox games
+    links = soup.find_all("a", href=True)
+
+
+    for link in links:
+
+        href = link["href"]
+
+        if "/game/" in href:
+
+            name = link.text.strip()
+
+
+            if name:
+
+                games.append({
+                    "name": name,
+                    "source": "RoTrends",
+                    "url": href
+                })
+
+
+    return games[:20]
+```
+
+---
+
+# Step 2.2 — Run Test Again
+
+Run:
+
+```bash
+python test_rotrends.py
+```
+
+You should hopefully see:
+
+```python
+[
+ {
+  "name": "Example Game",
+  "source": "RoTrends",
+  "url": "/game/example"
+ }
+]
+```
+
+---
+
+# Step 2.3 — Add Deduplication
+
+A game might appear from:
+
+* Roblox discovery
+* RoTrends
+
+We don't want duplicates.
+
+Create:
+
+```text
+utils.py
+```
+
+Add:
+
+```python
+def remove_duplicates(games):
+
+    seen = set()
+    unique = []
+
+
+    for game in games:
+
+        name = game["name"]
+
+
+        if name not in seen:
+
+            seen.add(name)
+            unique.append(game)
+
+
+    return unique
+```
+
+---
+
+# Step 2.4 — Update Data Collector
+
+Open:
+
+```text
+data_collector.py
+```
+
+Change:
+
+```python
+return games
+```
+
+to:
+
+```python
+from utils import remove_duplicates
+
+return remove_duplicates(games)
+```
+
+Now:
+
+```text
+Roblox API
+      +
+RoTrends
+      |
+      ↓
+Remove duplicates
+      |
+      ↓
+Scanner
+```
+
+---
+
+# Step 2.5 — Add RoTrends Bonus Points
+
+Now your trend score should reward RoTrends games.
+
+Open:
+
+```text
+trend.py
+```
+
+Find:
+
+```python
+def calculate_trend_score(game, growth):
+```
+
+Add:
+
+```python
+if game.get("source") == "RoTrends":
+    score += 15
+```
+
+Now:
+
+A game discovered through RoTrends gets:
+
+```text
++15 Trend Signal
+```
+
+---
+
+# Step 2.6 — Test Full Flow
+
+Restart your bot.
+
+Run:
+
+```text
+/scan
+```
+
+Your result should now have games from multiple sources:
+
+Example:
+
+```
+🎮 Mining Simulator
+
+Source:
+🔥 RoTrends
+
+Players:
+4,500
+
+Trend Score:
+92/100
+```
+
+---
+
+## After this step you have:
+
+✅ RoTrends connected
+✅ Games collected from RoTrends
+✅ Duplicate protection
+✅ RoTrends affects scoring
+
+---
+
+Next step is **Step 3: Build the "Opportunity Report" system**.
+
+This will make the bot explain *why* it found a game:
+
+Example:
+
+```
+🔥 Rising Opportunity
+
+Game:
+Mining Simulator
+
+Why detected:
+✅ Trending on RoTrends
+✅ +180% player growth
+✅ Strong player engagement
+✅ New developer
+
+Recommendation:
+Monitor / Contact Developer
+```
+
+That is where this starts becoming a business tool instead of just a scraper.

@@ -1,5 +1,6 @@
 from game_search import search_games
 from rotrends import get_rotrends_games
+from utils import remove_duplicates
 
 
 def collect_games():
@@ -16,4 +17,4 @@ def collect_games():
         game["source"] = game.get("source", "RoTrends")
         games.append(game)
 
-    return games
+    return remove_duplicates(games)

@@ -21,4 +21,8 @@ def calculate_trend_score(game, growth):
         if ratio >= 0.05:
             score += 20
 
+    # RoTrends bonus signal
+    if game.get("source") == "RoTrends":
+        score += 15
+
     return min(score, 100)
