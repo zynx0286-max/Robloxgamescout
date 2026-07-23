@@ -1,24 +1,34 @@
-"""Future home of the Roblox game scouting logic."""
+def calculate_score(game):
+    score = 0
 
-from roblox_api import search_games
+    # Player activity
+    if game["playing"] >= 1000:
+        score += 25
+    elif game["playing"] >= 100:
+        score += 10
+
+    # Visits
+    if game["visits"] >= 1000000:
+        score += 25
+    elif game["visits"] >= 100000:
+        score += 10
+
+    # Favorites
+    if game["favorites"] >= 50000:
+        score += 20
+    elif game["favorites"] >= 10000:
+        score += 10
+
+    return score
 
 
-async def scout_games(keyword: str, min_visits: int = 0, min_players: int = 0):
-    """Find games matching a keyword and filter by basic stats."""
-    games = await search_games(keyword)
-
-    results = []
+def rank_games(games):
     for game in games:
-        visits = game.get("visits", 0)
-        players = game.get("playerCount", 0)
+        game["score"] = calculate_score(game)
 
-        if visits >= min_visits and players >= min_players:
-            results.append({
-                "name": game.get("name", "Unknown"),
-                "universe_id": game.get("universeId"),
-                "visits": visits,
-                "players": players,
-                "creator": game.get("creator", {}).get("name", "Unknown"),
-            })
+    games.sort(
+        key=lambda x: x["score"],
+        reverse=True
+    )
 
-    return results
+    return games

@@ -1,0 +1,228 @@
+Great. That means the hardest "connection" part is done. Your bot can now communicate with Roblox.
+
+Now we move to **Day 2 — Step 8: Build the Game Scanner Foundation.**
+
+Right now:
+
+```text
+/game 123456
+↓
+Gets information about ONE game
+```
+
+The scout bot needs to eventually do:
+
+```text
+/scan
+↓
+Finds MANY games
+↓
+Checks growth/trends
+↓
+Ranks opportunities
+```
+
+We will build the ranking system first.
+
+---
+
+# Step 8 — Create `scanner.py`
+
+Create:
+
+```text
+scanner.py
+```
+
+Your structure:
+
+```text
+Roblox-Game-Scout-Bot
+
+main.py
+database.py
+roblox_api.py
+scanner.py  ← NEW
+utils.py
+```
+
+Paste:
+
+```python
+def calculate_score(game):
+    score = 0
+
+    # Player activity
+    if game["playing"] >= 1000:
+        score += 25
+    elif game["playing"] >= 100:
+        score += 10
+
+    # Visits
+    if game["visits"] >= 1000000:
+        score += 25
+    elif game["visits"] >= 100000:
+        score += 10
+
+    # Favorites
+    if game["favorites"] >= 50000:
+        score += 20
+    elif game["favorites"] >= 10000:
+        score += 10
+
+    return score
+
+
+def rank_games(games):
+
+    for game in games:
+        game["score"] = calculate_score(game)
+
+    games.sort(
+        key=lambda x: x["score"],
+        reverse=True
+    )
+
+    return games
+```
+
+---
+
+# Step 9 — Test The Scoring System
+
+Create a temporary file:
+
+```text
+test_scanner.py
+```
+
+Paste:
+
+```python
+from scanner import rank_games
+
+
+games = [
+    {
+        "name": "Simulator A",
+        "playing": 5000,
+        "visits": 5000000,
+        "favorites": 100000
+    },
+    {
+        "name": "Tycoon B",
+        "playing": 200,
+        "visits": 50000,
+        "favorites": 5000
+    }
+]
+
+
+results = rank_games(games)
+
+
+for game in results:
+    print(
+        game["name"],
+        game["score"]
+    )
+```
+
+Run:
+
+```bash
+python test_scanner.py
+```
+
+Expected:
+
+```text
+Simulator A 70
+Tycoon B 20
+```
+
+---
+
+# Step 10 — Add `/scoretest` Command
+
+This lets you test the scoring inside Discord.
+
+Add:
+
+```python
+@bot.tree.command(
+    name="scoretest",
+    description="Test the game scoring system"
+)
+async def scoretest(interaction: discord.Interaction):
+
+    from scanner import calculate_score
+
+    game = {
+        "playing": 5000,
+        "visits": 5000000,
+        "favorites": 100000
+    }
+
+    score = calculate_score(game)
+
+    await interaction.response.send_message(
+        f"Game Scout Score: {score}/100"
+    )
+```
+
+---
+
+Restart the bot.
+
+Test:
+
+```text
+/scoretest
+```
+
+You should see:
+
+```text
+Game Scout Score: 70/100
+```
+
+---
+
+## What you just added:
+
+Your bot now has the beginning of its "brain":
+
+Before:
+
+```text
+Game data → Display
+```
+
+Now:
+
+```text
+Game data
+    ↓
+Analyze
+    ↓
+Score
+    ↓
+Rank
+```
+
+---
+
+After this works, we move to **Step 11: Automatically finding Roblox games** (the part where it starts becoming a real scout instead of a game lookup tool). That is where we start replacing:
+
+```text
+/game 123456
+```
+
+with:
+
+```text
+/scan
+```
+
+and the bot finds games itself.

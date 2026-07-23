@@ -2,6 +2,7 @@ import discord
 from discord import app_commands
 from database import add_user, get_user, update_user
 from roblox_api import get_game_info
+from scanner import calculate_score
 
 
 def setup_commands(tree: app_commands.CommandTree):
@@ -107,4 +108,18 @@ Genre:
 👤 Creator:
 {data['creator']}
 """
+        )
+
+    @tree.command(name="scoretest", description="Test the game scoring system")
+    async def scoretest(interaction: discord.Interaction):
+        game = {
+            "playing": 5000,
+            "visits": 5000000,
+            "favorites": 100000
+        }
+
+        score = calculate_score(game)
+
+        await interaction.response.send_message(
+            f"Game Scout Score: {score}/100"
         )
