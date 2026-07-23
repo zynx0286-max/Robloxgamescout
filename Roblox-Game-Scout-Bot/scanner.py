@@ -1,4 +1,4 @@
-from game_search import search_games
+from data_collector import collect_games
 from roblox_api import get_game_info
 from database import save_game_snapshot
 from growth import get_growth
@@ -51,7 +51,7 @@ def rank_games(games):
 
 
 def scan_games(user_settings=None):
-    """Scan games, filter by user settings, save snapshots, and rank results."""
+    """Scan games from all sources, filter, save snapshots, and rank."""
     if user_settings is None:
         user_settings = {
             "minimum_visits": 0,
@@ -61,12 +61,13 @@ def scan_games(user_settings=None):
 
     found_games = []
 
-    games = search_games()
+    games = collect_games()
 
     for game in games:
         info = get_game_info(game["id"])
 
         if info:
+            info["source"] = game.get("source", "Unknown")
             save_game_snapshot(info)
 
             growth = get_growth(info["id"])

@@ -1,0 +1,273 @@
+Nice. At this point your bot has the **core analysis engine**. Now we move into **Day 4 — Step 5: RoTrends + External Trend Data Integration.**
+
+The purpose:
+
+Right now your bot only knows:
+
+```text
+Game stats → Score
+```
+
+We want:
+
+```text
+Roblox stats
++
+Trend data
++
+Growth history
++
+Market signals
+
+↓
+
+Better opportunity ranking
+```
+
+---
+
+# Step 5 — Create RoTrends Data Layer
+
+## Important note:
+
+Before we depend on RoTrends, we make the bot flexible. Websites can change, APIs can break, and we don't want the entire bot destroyed if one source changes.
+
+We create a separate file:
+
+```text
+rotrends.py
+```
+
+Your structure:
+
+```text
+Roblox-Game-Scout-Bot
+
+main.py
+database.py
+roblox_api.py
+scanner.py
+filters.py
+growth.py
+trend.py
+categories.py
+rotrends.py   ← NEW
+```
+
+---
+
+# Step 5.1 — Create `rotrends.py`
+
+Paste:
+
+```python
+import requests
+
+
+def get_trending_games():
+
+    """
+    Gets trending Roblox games.
+    This will act as our trend data source.
+    """
+
+    games = []
+
+    # Placeholder for trend data
+
+    return games
+```
+
+---
+
+Right now it is empty.
+
+Why?
+
+Because we are building the structure first.
+
+Later this file will handle:
+
+* RoTrends data
+* Roblox discovery data
+* Other trend sources
+
+---
+
+# Step 5.2 — Add a Unified Data Collector
+
+Create:
+
+```text
+data_collector.py
+```
+
+Paste:
+
+```python
+from game_search import search_games
+from rotrends import get_trending_games
+
+
+def collect_games():
+
+    games = []
+
+    # Roblox discovery
+    games.extend(
+        search_games()
+    )
+
+
+    # Trend sources
+    games.extend(
+        get_trending_games()
+    )
+
+
+    return games
+```
+
+Now your bot has:
+
+```text
+Sources
+   |
+   ↓
+Data Collector
+   |
+   ↓
+Scanner
+   |
+   ↓
+Scoring
+```
+
+---
+
+# Step 5.3 — Update Scanner
+
+Open:
+
+```text
+scanner.py
+```
+
+Replace:
+
+```python
+games = search_games()
+```
+
+with:
+
+```python
+from data_collector import collect_games
+
+games = collect_games()
+```
+
+Now your scanner no longer depends on one source.
+
+---
+
+# Step 5.4 — Add Source Tracking
+
+We want to know where a game came from.
+
+Update your game data:
+
+Example:
+
+```python
+{
+"name": "Simulator X",
+"source": "RoTrends",
+"players": 5000
+}
+```
+
+Later your bot can say:
+
+```text
+Found through:
+🔥 RoTrends
+```
+
+---
+
+# Step 5.5 — Test Scanner
+
+Restart bot.
+
+Run:
+
+```text
+/scan
+```
+
+You should still get results.
+
+The difference:
+
+Your system is now ready for:
+
+```text
+RoTrends
++
+Roblox API
++
+Future APIs
+```
+
+---
+
+# Your Architecture Now:
+
+```text
+                Roblox API
+                    |
+                    |
+RoTrends ---- Data Collector ---- Other Sources
+                    |
+                    ↓
+                Scanner
+                    |
+                    ↓
+              Trend Analysis
+                    |
+                    ↓
+              Opportunity Score
+                    |
+                    ↓
+              Discord Report
+```
+
+---
+
+## Next Step:
+
+Now we improve the Discord experience.
+
+We build:
+
+# Day 4 — Step 6: Professional Discord Embeds + Buttons
+
+Instead of:
+
+```
+Game:
+Players:
+Score:
+```
+
+You get:
+
+* Game cards
+* Buttons
+* Links
+* Color-coded scores
+* "Save Game" button
+* "Ignore Game" button
+
+This is when the bot starts feeling like a real product.
