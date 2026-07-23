@@ -1,0 +1,37 @@
+^C~/workspace/Roblox-Game-Scout-Botcd /home/runner/workspace/Roblox-Game-Scout-Bot && python main.pypy
+2026-07-23 16:08:00 INFO     discord.client logging in using static token
+Slash commands synced to test server: 1529238991013155006
+Old global commands cleared
+2026-07-23 16:08:01 INFO     discord.gateway Shard ID None has connected to Gateway (Session ID: 706a959d3877385a5e34a82ac90ce5b5).
+Logged in as Roblox Bot#5302
+2026-07-23 16:09:09 ERROR    discord.app_commands.tree Ignoring exception in command 'scan'
+Traceback (most recent call last):
+  File "/home/runner/workspace/.pythonlibs/lib/python3.11/site-packages/discord/app_commands/commands.py", line 859, in _do_call
+    return await self._callback(interaction, **params)  # type: ignore
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/runner/workspace/Roblox-Game-Scout-Bot/commands.py", line 184, in scan
+    results = scan_games(user_settings)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/runner/workspace/Roblox-Game-Scout-Bot/scanner.py", line 71, in scan_games
+    if passes_filters(info, user_settings):
+       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/runner/workspace/Roblox-Game-Scout-Bot/filters.py", line 9, in passes_filters
+    if game.get("growth", 0) < settings["minimum_growth"]:
+       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+TypeError: '<' not supported between instances of 'int' and 'str'
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "/home/runner/workspace/.pythonlibs/lib/python3.11/site-packages/discord/app_commands/tree.py", line 1302, in _call
+    await command._invoke_with_namespace(interaction, namespace)
+  File "/home/runner/workspace/.pythonlibs/lib/python3.11/site-packages/discord/app_commands/commands.py", line 884, in _invoke_with_namespace
+    return await self._do_call(interaction, transformed_values)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/runner/workspace/.pythonlibs/lib/python3.11/site-packages/discord/app_commands/commands.py", line 873, in _do_call
+    raise CommandInvokeError(self, e) from e
+discord.app_commands.errors.CommandInvokeError: Command 'scan' raised an exception: TypeError: '<' not supported between instances of 'int' and 'str'
+^C~/workspace/Roblox-Game-Scout-Botcd /home/runner/workspace/Roblox-Game-Scout-Bot && rm scoutbot.dbdb
+~/workspace/Roblox-Game-Scout-Bot$ cd /home/runner/workspace/Roblox-Game-Scout-Bot && rm scoutbot.db
+rm: cannot remove 'scoutbot.db': No such file or directory
+~/workspace/Roblox-Game-Scout-Bot$ 

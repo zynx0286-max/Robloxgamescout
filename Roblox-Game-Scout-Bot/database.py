@@ -3,17 +3,39 @@ import sqlite3
 DATABASE = "scoutbot.db"
 
 
-def _add_column_if_not_exists(cursor, table, column, definition):
-    """Add a column to a table if it doesn't already exist."""
+def _table_columns(cursor, table):
+    """Return a list of column names for a table."""
     cursor.execute(f"PRAGMA table_info({table})")
-    columns = [row[1] for row in cursor.fetchall()]
-    if column not in columns:
-        cursor.execute(f"ALTER TABLE {table} ADD COLUMN {column} {definition}")
+    return [row[1] for row in cursor.fetchall()]
+
+
+def _recreate_users_table(cursor):
+    """Drop and recreate the users table with the full schema."""
+    cursor.execute("DROP TABLE IF EXISTS users")
+    cursor.execute("""
+    CREATE TABLE users (
+        discord_id INTEGER PRIMARY KEY,
+        minimum_visits INTEGER DEFAULT 100000,
+        minimum_players INTEGER DEFAULT 100,
+        minimum_growth INTEGER DEFAULT 0,
+        genre TEXT DEFAULT 'Any',
+        max_age INTEGER DEFAULT 365
+    )
+    """)
 
 
 def create_database():
     conn = sqlite3.connect(DATABASE)
     cursor = conn.cursor()
+
+    expected_columns = {
+        "discord_id",
+        "minimum_visits",
+        "minimum_players",
+        "minimum_growth",
+        "genre",
+        "max_age",
+    }
 
     cursor.execute("""
     CREATE TABLE IF NOT EXISTS users (
@@ -26,10 +48,10 @@ def create_database():
     )
     """)
 
-    # Add missing columns for older databases
-    _add_column_if_not_exists(cursor, "users", "minimum_growth", "INTEGER DEFAULT 0")
-    _add_column_if_not_exists(cursor, "users", "genre", "TEXT DEFAULT 'Any'")
-    _add_column_if_not_exists(cursor, "users", "max_age", "INTEGER DEFAULT 365")
+    existing_columns = set(_table_columns(cursor, "users"))
+    if not expected_columns.issubset(existing_columns):
+        # Old schema detected — reset the table
+        _recreate_users_table(cursor)
 
     cursor.execute("""
     CREATE TABLE IF NOT EXISTS game_history (
@@ -90,19 +112,19 @@ def update_user(
 
     if minimum_visits is not None:
         fields.append("minimum_visits = ?")
-        values.append(minimum_visits)
+        values.append(int(minimum_visits))
     if minimum_players is not None:
         fields.append("minimum_players = ?")
-        values.append(minimum_players)
+        values.append(int(minimum_players))
     if minimum_growth is not None:
         fields.append("minimum_growth = ?")
-        values.append(minimum_growth)
+        values.append(int(minimum_growth))
     if genre is not None:
         fields.append("genre = ?")
         values.append(genre)
     if max_age is not None:
         fields.append("max_age = ?")
-        values.append(max_age)
+        values.append(int(max_age))
 
     if fields:
         query = f"UPDATE users SET {', '.join(fields)} WHERE discord_id = ?"

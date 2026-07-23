@@ -53,19 +53,19 @@ def setup_commands(tree: app_commands.CommandTree):
 🎮 Scout Profile
 
 Minimum Visits:
-{data[1]:,}
+{int(data[1]):,}
 
 Minimum Players:
-{data[2]:,}
+{int(data[2]):,}
 
 Minimum Growth:
-{data[3]}%
+{int(data[3])}%
 
 Genre:
 {data[4]}
 
 Max Age:
-{data[5]} days
+{int(data[5])} days
 """
         )
 
@@ -97,19 +97,19 @@ Max Age:
 ⚙️ Scout Settings Updated
 
 Minimum Visits:
-{data[1]:,}
+{int(data[1]):,}
 
 Minimum Players:
-{data[2]:,}
+{int(data[2]):,}
 
 Minimum Growth:
-{data[3]}%
+{int(data[3])}%
 
 Genre:
 {data[4]}
 
 Max Age:
-{data[5]} days
+{int(data[5])} days
 """
         )
 
@@ -163,9 +163,9 @@ Max Age:
         data = get_user(user_id)
 
         user_settings = {
-            "minimum_visits": data[1] if data[1] is not None else 0,
-            "minimum_players": data[2] if data[2] is not None else 0,
-            "minimum_growth": data[3] if data[3] is not None else 0,
+            "minimum_visits": int(data[1]) if data[1] is not None else 0,
+            "minimum_players": int(data[2]) if data[2] is not None else 0,
+            "minimum_growth": int(data[3]) if data[3] is not None else 0,
         }
 
         await interaction.response.send_message(
