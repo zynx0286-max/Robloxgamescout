@@ -1,26 +1,27 @@
 import discord
-from discord.ext import commands
+from discord import app_commands
 import os
 from dotenv import load_dotenv
+from commands import setup_commands
 
 load_dotenv()
 
 TOKEN = os.getenv("DISCORD_TOKEN")
 
-intents = discord.Intents.default()
-intents.message_content = True
+class MyBot(discord.Client):
+    def __init__(self):
+        intents = discord.Intents.default()
+        super().__init__(intents=intents)
+        self.tree = app_commands.CommandTree(self)
 
-bot = commands.Bot(
-    command_prefix="!",
-    intents=intents
-)
+    async def setup_hook(self):
+        setup_commands(self.tree)
+        await self.tree.sync()
+
+bot = MyBot()
 
 @bot.event
 async def on_ready():
     print(f"Logged in as {bot.user}")
-
-@bot.command()
-async def hello(ctx):
-    await ctx.send("Roblox Game Scout Bot is online!")
 
 bot.run(TOKEN)

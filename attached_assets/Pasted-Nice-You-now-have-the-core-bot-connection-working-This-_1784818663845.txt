@@ -1,0 +1,172 @@
+Nice. You now have the **core bot connection working**. This is the most important first checkpoint.
+
+Next is **Day 1 — Step 10: Convert to Slash Commands + Create the Bot Structure.**
+
+Right now you have:
+
+```
+!hello
+```
+
+That works, but modern Discord bots use:
+
+```
+/hello
+/settings
+/scan
+/game
+```
+
+So we will upgrade it.
+
+---
+
+# Step 10 — Create Your First Slash Command
+
+Open `main.py`.
+
+Replace everything with:
+
+```python
+import discord
+from discord import app_commands
+import os
+from dotenv import load_dotenv
+
+load_dotenv()
+
+TOKEN = os.getenv("DISCORD_TOKEN")
+
+class MyBot(discord.Client):
+    def __init__(self):
+        intents = discord.Intents.default()
+        super().__init__(intents=intents)
+        self.tree = app_commands.CommandTree(self)
+
+    async def setup_hook(self):
+        await self.tree.sync()
+
+bot = MyBot()
+
+
+@bot.event
+async def on_ready():
+    print(f"Logged in as {bot.user}")
+
+
+@bot.tree.command(name="hello", description="Check if the bot is working")
+async def hello(interaction: discord.Interaction):
+    await interaction.response.send_message(
+        "Roblox Game Scout Bot is online!"
+    )
+
+
+bot.run(TOKEN)
+```
+
+---
+
+# Step 11 — Restart the Bot
+
+Press:
+
+**Stop**
+
+Then:
+
+**Run**
+
+Wait for:
+
+```
+Logged in as Roblox Game Scout
+```
+
+---
+
+# Step 12 — Test Slash Command
+
+Go to your Discord server.
+
+Type:
+
+```
+/hello
+```
+
+You should see:
+
+```
+Roblox Game Scout Bot is online!
+```
+
+---
+
+# Step 13 — Create the Project Files
+
+Now we organize it.
+
+Create these files:
+
+```
+Roblox-Game-Scout-Bot
+
+main.py
+config.py
+commands.py
+database.py
+roblox_api.py
+scanner.py
+utils.py
+.env
+```
+
+For now:
+
+* `main.py` → starts bot
+* `commands.py` → commands
+* `database.py` → saving data
+* `roblox_api.py` → Roblox information later
+* `scanner.py` → game scouting later
+
+---
+
+# Step 14 — Create Your First Real Command
+
+After `/hello` works, add:
+
+```
+/about
+```
+
+It should respond:
+
+```
+🎮 Roblox Game Scout Bot
+
+A tool that finds Roblox games with:
+• High growth potential
+• Trending activity
+• Strong player numbers
+• Developer opportunities
+```
+
+---
+
+Your Day 1 finish line is now:
+
+✅ Bot invited
+✅ Bot online
+✅ Slash commands working
+✅ Clean project setup
+
+After this, we start the **database system** so the bot can remember settings like:
+
+```
+Minimum Visits: 100,000
+Minimum Players: 500
+Game Age: 30 days
+Genre: Simulator
+```
+
+Finish `/hello` first, then we build the database.
