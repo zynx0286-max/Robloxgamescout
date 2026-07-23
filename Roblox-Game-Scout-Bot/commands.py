@@ -1,5 +1,6 @@
 import discord
 from discord import app_commands
+from database import add_user, get_user, update_user
 
 
 def setup_commands(tree: app_commands.CommandTree):
@@ -20,4 +21,60 @@ def setup_commands(tree: app_commands.CommandTree):
             "• Trending activity\n"
             "• Strong player numbers\n"
             "• Developer opportunities"
+        )
+
+    @tree.command(name="profile", description="View your scout settings")
+    async def profile(interaction: discord.Interaction):
+        user_id = interaction.user.id
+
+        add_user(user_id)
+        data = get_user(user_id)
+
+        await interaction.response.send_message(
+            f"""
+🎮 Scout Profile
+
+Minimum Visits:
+{data[1]:,}
+
+Minimum Players:
+{data[2]}
+
+Genre:
+{data[3]}
+"""
+        )
+
+    @tree.command(name="settings", description="Update your scout filters")
+    @app_commands.describe(
+        visits="Minimum number of visits a game must have",
+        players="Minimum number of active players",
+        genre="Genre to filter by (e.g. Simulator, RPG, Any)",
+    )
+    async def settings(
+        interaction: discord.Interaction,
+        visits: int = None,
+        players: int = None,
+        genre: str = None,
+    ):
+        user_id = interaction.user.id
+
+        add_user(user_id)
+        update_user(user_id, visits, players, genre)
+
+        data = get_user(user_id)
+
+        await interaction.response.send_message(
+            f"""
+⚙️ Settings Updated
+
+Minimum Visits:
+{data[1]:,}
+
+Minimum Players:
+{data[2]}
+
+Genre:
+{data[3]}
+"""
         )

@@ -1,69 +1,75 @@
-import aiosqlite
-from config import DATABASE_PATH
+import sqlite3
+
+DATABASE = "scoutbot.db"
 
 
-async def init_db():
-    """Create tables if they don't exist yet."""
-    async with aiosqlite.connect(DATABASE_PATH) as db:
-        await db.execute(
-            """
-            CREATE TABLE IF NOT EXISTS watchlist (
-                id            INTEGER PRIMARY KEY AUTOINCREMENT,
-                user_id       TEXT    NOT NULL,
-                universe_id   INTEGER NOT NULL,
-                name          TEXT    NOT NULL,
-                playing       INTEGER DEFAULT 0,
-                visits        INTEGER DEFAULT 0,
-                saved_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                UNIQUE(user_id, universe_id)
-            )
-            """
-        )
-        await db.commit()
-    print("Database initialised.")
+def create_database():
+    conn = sqlite3.connect(DATABASE)
+    cursor = conn.cursor()
+
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS users (
+        discord_id INTEGER PRIMARY KEY,
+        minimum_visits INTEGER DEFAULT 100000,
+        minimum_players INTEGER DEFAULT 100,
+        genre TEXT DEFAULT 'Any'
+    )
+    """)
+
+    conn.commit()
+    conn.close()
 
 
-async def save_game(user_id: str, game: dict):
-    """Insert or replace a game in the user's watchlist."""
-    async with aiosqlite.connect(DATABASE_PATH) as db:
-        await db.execute(
-            """
-            INSERT INTO watchlist (user_id, universe_id, name, playing, visits)
-            VALUES (?, ?, ?, ?, ?)
-            ON CONFLICT(user_id, universe_id) DO UPDATE SET
-                name    = excluded.name,
-                playing = excluded.playing,
-                visits  = excluded.visits
-            """,
-            (
-                user_id,
-                game["universeId"],
-                game["name"],
-                game.get("playing", 0),
-                game.get("visits", 0),
-            ),
-        )
-        await db.commit()
+def add_user(discord_id):
+    conn = sqlite3.connect(DATABASE)
+    cursor = conn.cursor()
+
+    cursor.execute("""
+    INSERT OR IGNORE INTO users (discord_id)
+    VALUES (?)
+    """, (discord_id,))
+
+    conn.commit()
+    conn.close()
 
 
-async def get_saved_games(user_id: str) -> list[dict]:
-    """Return all saved games for a user."""
-    async with aiosqlite.connect(DATABASE_PATH) as db:
-        db.row_factory = aiosqlite.Row
-        async with db.execute(
-            "SELECT universe_id, name, playing, visits FROM watchlist WHERE user_id = ? ORDER BY saved_at DESC",
-            (user_id,),
-        ) as cursor:
-            rows = await cursor.fetchall()
-    return [dict(row) for row in rows]
+def get_user(discord_id):
+    conn = sqlite3.connect(DATABASE)
+    cursor = conn.cursor()
+
+    cursor.execute("""
+    SELECT * FROM users WHERE discord_id = ?
+    """, (discord_id,))
+
+    user = cursor.fetchone()
+
+    conn.close()
+
+    return user
 
 
-async def remove_game(user_id: str, universe_id: int) -> bool:
-    """Delete a game from the user's watchlist. Returns True if a row was deleted."""
-    async with aiosqlite.connect(DATABASE_PATH) as db:
-        cursor = await db.execute(
-            "DELETE FROM watchlist WHERE user_id = ? AND universe_id = ?",
-            (user_id, universe_id),
-        )
-        await db.commit()
-    return cursor.rowcount > 0
+def update_user(discord_id, minimum_visits=None, minimum_players=None, genre=None):
+    """Update user settings. Only updates fields that are provided."""
+    conn = sqlite3.connect(DATABASE)
+    cursor = conn.cursor()
+
+    fields = []
+    values = []
+
+    if minimum_visits is not None:
+        fields.append("minimum_visits = ?")
+        values.append(minimum_visits)
+    if minimum_players is not None:
+        fields.append("minimum_players = ?")
+        values.append(minimum_players)
+    if genre is not None:
+        fields.append("genre = ?")
+        values.append(genre)
+
+    if fields:
+        query = f"UPDATE users SET {', '.join(fields)} WHERE discord_id = ?"
+        values.append(discord_id)
+        cursor.execute(query, values)
+        conn.commit()
+
+    conn.close()

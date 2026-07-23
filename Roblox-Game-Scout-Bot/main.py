@@ -2,6 +2,7 @@ import discord
 from discord import app_commands
 import os
 from dotenv import load_dotenv
+from database import create_database
 from commands import setup_commands
 
 load_dotenv()
@@ -16,13 +17,12 @@ class MyBot(discord.Client):
         self.tree = app_commands.CommandTree(self)
 
     async def setup_hook(self):
+        create_database()
         setup_commands(self.tree)
 
         if GUILD_ID:
             guild = discord.Object(id=int(GUILD_ID))
-            # Clear old guild commands first to avoid duplicates
             self.tree.clear_commands(guild=guild)
-            # Copy global commands to guild and sync
             self.tree.copy_global_to(guild=guild)
             await self.tree.sync(guild=guild)
             print(f"Slash commands synced to test server: {GUILD_ID}")

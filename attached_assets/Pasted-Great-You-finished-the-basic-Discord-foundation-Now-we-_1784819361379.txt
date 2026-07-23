@@ -1,0 +1,193 @@
+Great. You finished the basic Discord foundation. Now we move into the next major part of **Day 1: giving the bot memory**.
+
+Right now your bot can talk, but every time it restarts it forgets everything. A scout bot needs to remember things like:
+
+* User preferences
+* Saved games
+* Filters
+* Scanned results
+
+We will start with a simple **SQLite database** (free, built into Python).
+
+---
+
+# Step 15 — Create `database.py`
+
+In Replit:
+
+Create a new file:
+
+```
+database.py
+```
+
+Paste:
+
+```python
+import sqlite3
+
+DATABASE = "scoutbot.db"
+
+
+def create_database():
+    conn = sqlite3.connect(DATABASE)
+    cursor = conn.cursor()
+
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS users (
+        discord_id INTEGER PRIMARY KEY,
+        minimum_visits INTEGER DEFAULT 100000,
+        minimum_players INTEGER DEFAULT 100,
+        genre TEXT DEFAULT 'Any'
+    )
+    """)
+
+    conn.commit()
+    conn.close()
+
+
+def add_user(discord_id):
+    conn = sqlite3.connect(DATABASE)
+    cursor = conn.cursor()
+
+    cursor.execute("""
+    INSERT OR IGNORE INTO users (discord_id)
+    VALUES (?)
+    """, (discord_id,))
+
+    conn.commit()
+    conn.close()
+
+
+def get_user(discord_id):
+    conn = sqlite3.connect(DATABASE)
+    cursor = conn.cursor()
+
+    cursor.execute("""
+    SELECT * FROM users WHERE discord_id = ?
+    """, (discord_id,))
+
+    user = cursor.fetchone()
+
+    conn.close()
+
+    return user
+```
+
+---
+
+# Step 16 — Connect Database to `main.py`
+
+At the top of `main.py`, add:
+
+```python
+from database import create_database
+```
+
+Then find:
+
+```python
+async def setup_hook(self):
+```
+
+Change it to:
+
+```python
+async def setup_hook(self):
+    create_database()
+    await self.tree.sync()
+```
+
+Now whenever your bot starts, it automatically creates the database.
+
+---
+
+# Step 17 — Add `/profile` Command
+
+This lets you test if the database works.
+
+Add this below your `/hello` command:
+
+```python
+@bot.tree.command(name="profile", description="View your scout settings")
+async def profile(interaction: discord.Interaction):
+
+    from database import add_user, get_user
+
+    user_id = interaction.user.id
+
+    add_user(user_id)
+
+    data = get_user(user_id)
+
+    await interaction.response.send_message(
+        f"""
+🎮 Scout Profile
+
+Minimum Visits:
+{data[1]:,}
+
+Minimum Players:
+{data[2]}
+
+Genre:
+{data[3]}
+"""
+    )
+```
+
+---
+
+# Step 18 — Test
+
+Restart the bot.
+
+In Discord:
+
+```
+/profile
+```
+
+You should see:
+
+```
+🎮 Scout Profile
+
+Minimum Visits:
+100,000
+
+Minimum Players:
+100
+
+Genre:
+Any
+```
+
+---
+
+## What you just built:
+
+You now have:
+
+✅ Bot connected
+✅ Slash commands
+✅ Persistent storage
+✅ User profiles
+
+This is the beginning of the actual product.
+
+---
+
+After this works, the last part of Day 1 is:
+
+**Step 19 — Create `/settings`**
+
+Users will be able to change:
+
+```
+/settings visits:500000 players:1000 genre:simulator
+```
+
+Then Day 2 starts with connecting Roblox data.
+
+Try Step 15–18 and tell me when `/profile` works.
