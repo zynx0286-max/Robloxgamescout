@@ -1,0 +1,297 @@
+Great. Now we move into the part that makes this **different from a normal Roblox game finder**.
+
+So far your bot can find games based on raw numbers:
+
+* Players
+* Visits
+* Favorites
+* Growth
+
+Now we add **trend intelligence**.
+
+The goal:
+
+Instead of:
+
+```text
+"This game has 50,000 players"
+```
+
+Your bot can say:
+
+```text
+"This game is gaining players quickly and may be worth watching."
+```
+
+---
+
+# DAY 4 — Step 1: Create Trend Analysis System
+
+## What we are adding:
+
+A new score:
+
+```text
+Trend Score
+```
+
+Example:
+
+```text
+Game Score: 82/100
+
+Trend Score: 91/100
+
+Reason:
+✅ Player growth accelerating
+✅ High player-to-visit ratio
+✅ Recent activity
+```
+
+---
+
+# Step 1.1 — Create `trend.py`
+
+Create:
+
+```text
+trend.py
+```
+
+Your project:
+
+```text
+Roblox-Game-Scout-Bot
+
+main.py
+database.py
+roblox_api.py
+scanner.py
+filters.py
+growth.py
+trend.py  ← NEW
+```
+
+Paste:
+
+```python
+def calculate_trend_score(game, growth):
+
+    score = 0
+
+    # Growth speed
+    if growth >= 200:
+        score += 40
+
+    elif growth >= 100:
+        score += 30
+
+    elif growth >= 50:
+        score += 20
+
+
+    # Current players
+    if game["playing"] >= 5000:
+        score += 25
+
+    elif game["playing"] >= 1000:
+        score += 15
+
+
+    # Engagement
+    if game["favorites"] > 0:
+
+        ratio = (
+            game["favorites"]
+            /
+            game["visits"]
+        )
+
+        if ratio >= 0.05:
+            score += 20
+
+
+    return min(score, 100)
+```
+
+---
+
+# Step 1.2 — Add Trend Score To Scanner
+
+Open:
+
+```text
+scanner.py
+```
+
+Add:
+
+```python
+from trend import calculate_trend_score
+from growth import get_growth
+```
+
+After getting game information:
+
+Add:
+
+```python
+growth = get_growth(
+    info["id"]
+)
+
+info["growth"] = growth
+
+info["trend_score"] = calculate_trend_score(
+    info,
+    growth
+)
+```
+
+Now every game has:
+
+```text
+Game
+ |
+ ├── Player count
+ ├── Visits
+ ├── Favorites
+ ├── Growth %
+ └── Trend Score
+```
+
+---
+
+# Step 2 — Create Categories
+
+Create:
+
+```text
+categories.py
+```
+
+Paste:
+
+```python
+def get_category(game):
+
+    score = game["trend_score"]
+
+
+    if score >= 80:
+        return "🔥 Rising Star"
+
+    elif score >= 50:
+        return "📈 Growing"
+
+    else:
+        return "⚪ Normal"
+```
+
+---
+
+# Step 3 — Update `/scan`
+
+Change the result message.
+
+Before:
+
+```text
+Score: 80
+```
+
+After:
+
+```text
+🎮 Mining Simulator
+
+Players:
+4,500
+
+Growth:
++140%
+
+Trend Score:
+87/100
+
+Category:
+🔥 Rising Star
+
+Why:
+✅ Fast growth
+✅ Strong engagement
+```
+
+---
+
+# Step 4 — Add `/trending`
+
+Create a new command:
+
+```text
+/trending
+```
+
+Purpose:
+
+Shows only:
+
+```text
+Trend Score > 80
+```
+
+Example:
+
+```text
+🔥 Trending Roblox Games
+
+1.
+Mining Simulator
+
+Trend:
+92/100
+
+Growth:
++300%
+
+
+2.
+Tower Defense
+
+Trend:
+86/100
+```
+
+---
+
+# After This Step:
+
+Your bot now has:
+
+✅ Data collection
+✅ Filtering
+✅ Scoring
+✅ Growth analysis
+✅ Trend detection
+✅ Categories
+
+---
+
+## Next Steps After Trend System:
+
+The next upgrade is **RoTrends integration**:
+
+We add:
+
+* Roblox search trends
+* Rising games
+* Genre trends
+* "What type of games are blowing up?"
+
+Then later:
+
+* AI summaries
+* Developer contact tracking
+* Discord dashboards
+
+You are basically building a Roblox market research tool.
