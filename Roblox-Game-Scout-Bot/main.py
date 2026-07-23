@@ -7,6 +7,7 @@ from commands import setup_commands
 load_dotenv()
 
 TOKEN = os.getenv("DISCORD_TOKEN")
+GUILD_ID = os.getenv("GUILD_ID")  # Optional: your Discord server ID for fast testing
 
 class MyBot(discord.Client):
     def __init__(self):
@@ -16,7 +17,17 @@ class MyBot(discord.Client):
 
     async def setup_hook(self):
         setup_commands(self.tree)
-        await self.tree.sync()
+
+        if GUILD_ID:
+            # Sync to one server instantly (great for testing)
+            guild = discord.Object(id=int(GUILD_ID))
+            self.tree.copy_global_to(guild=guild)
+            await self.tree.sync(guild=guild)
+            print(f"Slash commands synced to test server: {GUILD_ID}")
+        else:
+            # Global sync (can take up to 1 hour to appear)
+            await self.tree.sync()
+            print("Slash commands synced globally (may take up to 1 hour)")
 
 bot = MyBot()
 
