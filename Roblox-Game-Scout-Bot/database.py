@@ -3,6 +3,14 @@ import sqlite3
 DATABASE = "scoutbot.db"
 
 
+def _add_column_if_not_exists(cursor, table, column, definition):
+    """Add a column to a table if it doesn't already exist."""
+    cursor.execute(f"PRAGMA table_info({table})")
+    columns = [row[1] for row in cursor.fetchall()]
+    if column not in columns:
+        cursor.execute(f"ALTER TABLE {table} ADD COLUMN {column} {definition}")
+
+
 def create_database():
     conn = sqlite3.connect(DATABASE)
     cursor = conn.cursor()
@@ -12,9 +20,16 @@ def create_database():
         discord_id INTEGER PRIMARY KEY,
         minimum_visits INTEGER DEFAULT 100000,
         minimum_players INTEGER DEFAULT 100,
-        genre TEXT DEFAULT 'Any'
+        minimum_growth INTEGER DEFAULT 0,
+        genre TEXT DEFAULT 'Any',
+        max_age INTEGER DEFAULT 365
     )
     """)
+
+    # Add missing columns for older databases
+    _add_column_if_not_exists(cursor, "users", "minimum_growth", "INTEGER DEFAULT 0")
+    _add_column_if_not_exists(cursor, "users", "genre", "TEXT DEFAULT 'Any'")
+    _add_column_if_not_exists(cursor, "users", "max_age", "INTEGER DEFAULT 365")
 
     cursor.execute("""
     CREATE TABLE IF NOT EXISTS game_history (
@@ -58,7 +73,14 @@ def get_user(discord_id):
     return user
 
 
-def update_user(discord_id, minimum_visits=None, minimum_players=None, genre=None):
+def update_user(
+    discord_id,
+    minimum_visits=None,
+    minimum_players=None,
+    minimum_growth=None,
+    genre=None,
+    max_age=None,
+):
     """Update user settings. Only updates fields that are provided."""
     conn = sqlite3.connect(DATABASE)
     cursor = conn.cursor()
@@ -72,9 +94,15 @@ def update_user(discord_id, minimum_visits=None, minimum_players=None, genre=Non
     if minimum_players is not None:
         fields.append("minimum_players = ?")
         values.append(minimum_players)
+    if minimum_growth is not None:
+        fields.append("minimum_growth = ?")
+        values.append(minimum_growth)
     if genre is not None:
         fields.append("genre = ?")
         values.append(genre)
+    if max_age is not None:
+        fields.append("max_age = ?")
+        values.append(max_age)
 
     if fields:
         query = f"UPDATE users SET {', '.join(fields)} WHERE discord_id = ?"

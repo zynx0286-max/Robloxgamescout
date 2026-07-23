@@ -2,6 +2,7 @@ from game_search import search_games
 from roblox_api import get_game_info
 from database import save_game_snapshot
 from growth import get_growth
+from filters import passes_filters
 
 
 def calculate_score(game):
@@ -49,18 +50,25 @@ def rank_games(games):
     return games
 
 
-def scan_games():
+def scan_games(user_settings=None):
+    """Scan games, filter by user settings, save snapshots, and rank results."""
+    if user_settings is None:
+        user_settings = {
+            "minimum_visits": 0,
+            "minimum_players": 0,
+            "minimum_growth": 0,
+        }
+
     found_games = []
 
     games = search_games()
 
     for game in games:
-        info = get_game_info(
-            game["id"]
-        )
+        info = get_game_info(game["id"])
 
         if info:
             save_game_snapshot(info)
-            found_games.append(info)
+            if passes_filters(info, user_settings):
+                found_games.append(info)
 
     return rank_games(found_games)

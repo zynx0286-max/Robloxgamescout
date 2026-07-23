@@ -56,44 +56,60 @@ Minimum Visits:
 {data[1]:,}
 
 Minimum Players:
-{data[2]}
+{data[2]:,}
+
+Minimum Growth:
+{data[3]}%
 
 Genre:
-{data[3]}
+{data[4]}
+
+Max Age:
+{data[5]} days
 """
         )
 
-    @tree.command(name="settings", description="Update your scout filters")
+    @tree.command(name="settings", description="Change your scout filters")
     @app_commands.describe(
         visits="Minimum number of visits a game must have",
         players="Minimum number of active players",
+        growth="Minimum growth percentage (e.g. 50)",
         genre="Genre to filter by (e.g. Simulator, RPG, Any)",
+        max_age="Maximum game age in days",
     )
     async def settings(
         interaction: discord.Interaction,
         visits: int = None,
         players: int = None,
+        growth: int = None,
         genre: str = None,
+        max_age: int = None,
     ):
         user_id = interaction.user.id
 
         add_user(user_id)
-        update_user(user_id, visits, players, genre)
+        update_user(user_id, visits, players, growth, genre, max_age)
 
         data = get_user(user_id)
 
         await interaction.response.send_message(
             f"""
-⚙️ Settings Updated
+⚙️ Scout Settings Updated
 
 Minimum Visits:
 {data[1]:,}
 
 Minimum Players:
-{data[2]}
+{data[2]:,}
+
+Minimum Growth:
+{data[3]}%
 
 Genre:
-{data[3]}
+{data[4]}
+
+Max Age:
+{data[5]} days
 """
         )
 
@@ -142,24 +158,43 @@ Genre:
 
     @tree.command(name="scan", description="Find trending Roblox games")
     async def scan(interaction: discord.Interaction):
+        user_id = interaction.user.id
+        add_user(user_id)
+        data = get_user(user_id)
+
+        user_settings = {
+            "minimum_visits": data[1] if data[1] is not None else 0,
+            "minimum_players": data[2] if data[2] is not None else 0,
+            "minimum_growth": data[3] if data[3] is not None else 0,
+        }
+
         await interaction.response.send_message(
-            "🔎 Scanning Roblox games..."
+            f"""
+🔎 Scan Complete
+
+Filters:
+Players: {user_settings['minimum_players']:,}+
+Visits: {user_settings['minimum_visits']:,}+
+Growth: {user_settings['minimum_growth']}%
+
+Scanning...
+"""
         )
 
-        results = scan_games()
+        results = scan_games(user_settings)
 
         if not results:
             await interaction.followup.send(
-                "No games found."
+                "No games matched your filters. Try lowering them with `/settings`."
             )
             return
 
-        for game in results[:5]:
+        for index, game in enumerate(results[:5], start=1):
             growth = game.get("growth", 0)
             growth_text = f"+{growth}%" if growth > 0 else f"{growth}%"
 
             message = (
-                f"🎮 **{game['name']}**\n\n"
+                f"**{index}. {game['name']}**\n\n"
                 f"👥 Players:\n{game['playing']:,}\n\n"
                 f"📈 Growth:\n{growth_text}\n\n"
                 f"⭐ Score:\n{game['score']}/100\n\n"

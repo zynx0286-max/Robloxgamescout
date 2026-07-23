@@ -1,0 +1,279 @@
+Great. At this point, your bot is starting to become a real scouting tool. The next upgrade is **making the scanner customizable**.
+
+Right now everyone gets the same scan:
+
+```text
+/scan
+↓
+Find games
+↓
+Score games
+```
+
+But a Roblox developer/investor might want:
+
+* Only new games
+* Only simulators
+* Minimum player count
+* Minimum growth rate
+* Minimum visits
+
+So now we build **Custom Filters**.
+
+# DAY 3 — Step 6: Add Advanced Scan Settings
+
+---
+
+# Step 6.1 — Update Database Settings
+
+Open:
+
+```text
+database.py
+```
+
+Find your users table.
+
+Replace it with:
+
+```python
+cursor.execute("""
+CREATE TABLE IF NOT EXISTS users (
+    discord_id INTEGER PRIMARY KEY,
+    minimum_visits INTEGER DEFAULT 100000,
+    minimum_players INTEGER DEFAULT 100,
+    minimum_growth INTEGER DEFAULT 0,
+    genre TEXT DEFAULT 'Any',
+    max_age INTEGER DEFAULT 365
+)
+""")
+```
+
+Now users can save:
+
+```text
+Minimum Visits
+Minimum Players
+Minimum Growth
+Genre
+Maximum Age
+```
+
+---
+
+# Step 6.2 — Create Settings Command
+
+In `main.py`, add:
+
+```python
+@bot.tree.command(
+    name="settings",
+    description="Change your scout filters"
+)
+async def settings(
+    interaction: discord.Interaction,
+    visits: int,
+    players: int,
+    growth: int,
+    genre: str
+):
+
+    from database import add_user
+
+    user_id = interaction.user.id
+
+    add_user(user_id)
+
+    await interaction.response.send_message(
+        f"""
+⚙️ Scout Settings Updated
+
+Minimum Visits:
+{visits:,}
+
+Minimum Players:
+{players:,}
+
+Minimum Growth:
+{growth}%
+
+Genre:
+{genre}
+"""
+    )
+```
+
+---
+
+# Step 6.3 — Test It
+
+Restart your bot.
+
+Run:
+
+```text
+/settings
+```
+
+Example:
+
+```text
+/settings visits:500000 players:1000 growth:50 genre:simulator
+```
+
+Expected:
+
+```text
+⚙️ Scout Settings Updated
+
+Minimum Visits:
+500,000
+
+Minimum Players:
+1,000
+
+Minimum Growth:
+50%
+
+Genre:
+simulator
+```
+
+---
+
+# Step 6.4 — Create Filter System
+
+Create:
+
+```text
+filters.py
+```
+
+Add:
+
+```python
+def passes_filters(game, settings):
+
+    if game["visits"] < settings["minimum_visits"]:
+        return False
+
+
+    if game["playing"] < settings["minimum_players"]:
+        return False
+
+
+    return True
+```
+
+---
+
+# Step 6.5 — Connect Filters To Scanner
+
+Open:
+
+```text
+scanner.py
+```
+
+Before scoring games:
+
+Add:
+
+```python
+from filters import passes_filters
+```
+
+Then:
+
+```python
+if passes_filters(info, user_settings):
+    found_games.append(info)
+```
+
+Now:
+
+```text
+Game Found
+      |
+      ↓
+Filters
+      |
+      ↓
+Score
+      |
+      ↓
+Display
+```
+
+---
+
+# Step 6.6 — Improve Scan Output
+
+Change your `/scan` message to:
+
+```
+🔎 Scan Complete
+
+Filters:
+Players: 1,000+
+Growth: 50%+
+
+Found:
+
+1. Mining Simulator
+
+Players:
+3,400
+
+Growth:
++120%
+
+Score:
+93/100
+
+
+2. Tower Game
+
+Players:
+1,800
+
+Growth:
++70%
+
+Score:
+84/100
+```
+
+---
+
+# End of This Section:
+
+Your bot now has:
+
+✅ Automatic scanning
+✅ Game scoring
+✅ Growth tracking
+✅ User filters
+✅ Personalized results
+
+---
+
+## Next After This:
+
+We move into the biggest feature:
+
+# RoTrends + Trend Intelligence
+
+The bot will start answering:
+
+> "Which Roblox games are gaining attention before everyone notices?"
+
+Features:
+
+* Trending detection
+* Velocity score
+* New game discovery
+* "Rising star" category
+* "Avoid" category
+
+This is where the bot becomes much closer to a real market research tool.
