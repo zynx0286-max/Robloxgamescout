@@ -1,0 +1,282 @@
+Great. Now we move into **Day 4 — Step 6: Professional Discord Interface**.
+
+Your bot already has the "brain." Now we improve how users interact with it.
+
+Right now:
+
+```text
+🎮 Game Name
+Players:
+Visits:
+Score:
+```
+
+We upgrade it into:
+
+```text
+🎮 Mining Simulator
+
+🔥 Rising Star
+
+📊 Stats
+👥 Players: 5,000
+👀 Visits: 2.5M
+📈 Growth: +120%
+⭐ Trend Score: 91/100
+
+Why it's interesting:
+✅ Fast growth
+✅ Strong engagement
+
+[🔗 View Game] [💾 Save]
+```
+
+---
+
+# Step 6.1 — Create `embeds.py`
+
+Create:
+
+```text
+embeds.py
+```
+
+Your structure:
+
+```text
+Roblox-Game-Scout-Bot
+
+main.py
+database.py
+roblox_api.py
+scanner.py
+embeds.py  ← NEW
+```
+
+Paste:
+
+```python
+import discord
+
+
+def create_game_embed(game):
+
+    embed = discord.Embed(
+        title=f"🎮 {game['name']}",
+        description="Roblox Game Opportunity",
+    )
+
+    embed.add_field(
+        name="👥 Players",
+        value=f"{game['playing']:,}",
+        inline=True
+    )
+
+    embed.add_field(
+        name="👀 Visits",
+        value=f"{game['visits']:,}",
+        inline=True
+    )
+
+    embed.add_field(
+        name="⭐ Score",
+        value=f"{game.get('score', 0)}/100",
+        inline=True
+    )
+
+
+    embed.add_field(
+        name="📈 Growth",
+        value=f"+{game.get('growth',0)}%",
+        inline=True
+    )
+
+
+    embed.add_field(
+        name="🔥 Trend Score",
+        value=f"{game.get('trend_score',0)}/100",
+        inline=True
+    )
+
+
+    return embed
+```
+
+---
+
+# Step 6.2 — Create Buttons
+
+Create:
+
+```text
+buttons.py
+```
+
+Paste:
+
+```python
+import discord
+
+
+class GameButtons(discord.ui.View):
+
+    def __init__(self):
+        super().__init__()
+
+
+    @discord.ui.button(
+        label="💾 Save Game",
+        style=discord.ButtonStyle.green
+    )
+    async def save(
+        self,
+        interaction: discord.Interaction,
+        button: discord.ui.Button
+    ):
+
+        await interaction.response.send_message(
+            "Game saved!",
+            ephemeral=True
+        )
+
+
+    @discord.ui.button(
+        label="🔗 View Roblox",
+        style=discord.ButtonStyle.link,
+        url="https://www.roblox.com"
+    )
+    async def view_game(
+        self,
+        interaction,
+        button
+    ):
+        pass
+```
+
+---
+
+# Step 6.3 — Connect To `/scan`
+
+Open:
+
+```text
+main.py
+```
+
+Find your scan response.
+
+Replace:
+
+```python
+await interaction.followup.send(message)
+```
+
+with:
+
+```python
+from embeds import create_game_embed
+from buttons import GameButtons
+
+
+await interaction.followup.send(
+    embed=create_game_embed(results[0]),
+    view=GameButtons()
+)
+```
+
+---
+
+# Step 6.4 — Test
+
+Restart bot.
+
+Run:
+
+```text
+/scan
+```
+
+You should now get:
+
+* A Discord embed
+* Buttons
+* Cleaner layout
+
+---
+
+# Step 6.5 — Add Saved Games System
+
+Now the save button actually does something.
+
+Update database:
+
+Create table:
+
+```python
+saved_games
+```
+
+Structure:
+
+```text
+user_id
+game_id
+game_name
+date_saved
+```
+
+Then:
+
+When someone clicks:
+
+```text
+💾 Save Game
+```
+
+The bot stores it.
+
+---
+
+# After This Step:
+
+Your bot has:
+
+✅ Professional Discord UI
+✅ Game cards
+✅ Buttons
+✅ Saved games foundation
+
+---
+
+# Next Step After This:
+
+**Day 5 — Developer Opportunity System**
+
+This is where the bot becomes useful for finding business opportunities:
+
+Features:
+
+* Track interesting games
+* Save developer profiles
+* Contact notes
+* Acquisition/investment watchlist
+* "Why this game is interesting"
+
+Example:
+
+```text
+📌 Watchlist
+
+Mining Simulator
+
+Developer:
+Example Studios
+
+Reason:
++300% growth
+
+Status:
+Contact later
+```
+
+That turns it from a scanner into a complete Roblox opportunity tracker.

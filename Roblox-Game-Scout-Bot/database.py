@@ -50,7 +50,6 @@ def create_database():
 
     existing_columns = set(_table_columns(cursor, "users"))
     if not expected_columns.issubset(existing_columns):
-        # Old schema detected — reset the table
         _recreate_users_table(cursor)
 
     cursor.execute("""
@@ -60,6 +59,17 @@ def create_database():
         players INTEGER,
         visits INTEGER,
         timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+    """)
+
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS saved_games (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id INTEGER NOT NULL,
+        game_id INTEGER NOT NULL,
+        game_name TEXT NOT NULL,
+        date_saved TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(user_id, game_id)
     )
     """)
 
@@ -153,3 +163,43 @@ def save_game_snapshot(game):
 
     conn.commit()
     conn.close()
+
+
+def save_game_for_user(user_id, game):
+    """Save a game to a user's watchlist."""
+    conn = sqlite3.connect(DATABASE)
+    cursor = conn.cursor()
+
+    cursor.execute("""
+    INSERT INTO saved_games (user_id, game_id, game_name)
+    VALUES (?, ?, ?)
+    ON CONFLICT(user_id, game_id) DO UPDATE SET
+        game_name = excluded.game_name,
+        date_saved = CURRENT_TIMESTAMP
+    """,
+    (
+        user_id,
+        game["id"],
+        game["name"]
+    ))
+
+    conn.commit()
+    conn.close()
+
+
+def get_saved_games_for_user(user_id):
+    """Return all games saved by a user."""
+    conn = sqlite3.connect(DATABASE)
+    cursor = conn.cursor()
+
+    cursor.execute("""
+    SELECT game_id, game_name, date_saved
+    FROM saved_games
+    WHERE user_id = ?
+    ORDER BY date_saved DESC
+    """, (user_id,))
+
+    rows = cursor.fetchall()
+    conn.close()
+
+    return rows

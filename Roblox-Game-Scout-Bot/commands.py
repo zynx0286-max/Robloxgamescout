@@ -1,9 +1,11 @@
 import discord
 from discord import app_commands
-from database import add_user, get_user, update_user
+from database import add_user, get_user, update_user, get_saved_games_for_user
 from roblox_api import get_game_info
 from scanner import calculate_score, scan_games
 from categories import get_category
+from embeds import create_game_embed
+from buttons import GameButtons
 
 
 def _reasons(game):
@@ -25,7 +27,7 @@ def _reasons(game):
 
 
 def _format_game_message(index, game):
-    """Format a single game result message."""
+    """Format a single game result message (fallback text version)."""
     growth = game.get("growth", 0)
     growth_text = f"+{growth}%" if growth > 0 else f"{growth}%"
     category = get_category(game)
@@ -208,7 +210,15 @@ Scanning...
             )
             return
 
-        for index, game in enumerate(results[:5], start=1):
+        # Send the top result as a professional embed with buttons
+        top_game = results[0]
+        await interaction.followup.send(
+            embed=create_game_embed(top_game),
+            view=GameButtons(top_game)
+        )
+
+        # Send remaining results as text summaries
+        for index, game in enumerate(results[1:5], start=2):
             await interaction.followup.send(_format_game_message(index, game))
 
     @tree.command(name="trending", description="Show only high-trend games")
@@ -239,3 +249,28 @@ Scanning...
             )
 
         await interaction.followup.send(message)
+
+    @tree.command(name="watchlist", description="View your saved games")
+    async def watchlist(interaction: discord.Interaction):
+        user_id = interaction.user.id
+        saved = get_saved_games_for_user(user_id)
+
+        if not saved:
+            await interaction.response.send_message(
+                "Your watchlist is empty. Use the 💾 Save Game button on a scan result."
+            )
+            return
+
+        embed = discord.Embed(
+            title="💾 Saved Games",
+            color=discord.Color.blue(),
+        )
+
+        for game_id, game_name, date_saved in saved:
+            embed.add_field(
+                name=game_name,
+                value=f"ID: `{game_id}` | Saved: {date_saved[:10]}",
+                inline=False
+            )
+
+        await interaction.response.send_message(embed=embed)
