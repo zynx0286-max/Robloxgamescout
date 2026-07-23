@@ -16,6 +16,16 @@ def create_database():
     )
     """)
 
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS game_history (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        game_id INTEGER,
+        players INTEGER,
+        visits INTEGER,
+        timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+    """)
+
     conn.commit()
     conn.close()
 
@@ -72,4 +82,24 @@ def update_user(discord_id, minimum_visits=None, minimum_players=None, genre=Non
         cursor.execute(query, values)
         conn.commit()
 
+    conn.close()
+
+
+def save_game_snapshot(game):
+    """Save a snapshot of a game's stats to the history table."""
+    conn = sqlite3.connect(DATABASE)
+    cursor = conn.cursor()
+
+    cursor.execute("""
+    INSERT INTO game_history
+    (game_id, players, visits)
+    VALUES (?, ?, ?)
+    """,
+    (
+        game["id"],
+        game["playing"],
+        game["visits"]
+    ))
+
+    conn.commit()
     conn.close()

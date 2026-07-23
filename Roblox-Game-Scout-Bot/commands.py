@@ -5,6 +5,22 @@ from roblox_api import get_game_info
 from scanner import calculate_score, scan_games
 
 
+def _reasons(game):
+    """Build a list of positive signals for a game."""
+    reasons = []
+    if game.get("growth", 0) >= 50:
+        reasons.append("✅ Fast player growth")
+    if game["playing"] >= 1000:
+        reasons.append("✅ High activity")
+    if game["visits"] >= 1000000:
+        reasons.append("✅ Strong engagement")
+    if game["favorites"] >= 10000:
+        reasons.append("✅ Popular with players")
+    if not reasons:
+        reasons.append("ℹ️ Low activity right now")
+    return "\n".join(reasons)
+
+
 def setup_commands(tree: app_commands.CommandTree):
     """Register all slash commands with the bot's command tree."""
 
@@ -138,14 +154,16 @@ Genre:
             )
             return
 
-        message = "🎮 Top Roblox Opportunities\n\n"
-
         for game in results[:5]:
-            message += (
-                f"**{game['name']}**\n"
-                f"Players: {game['playing']:,}\n"
-                f"Visits: {game['visits']:,}\n"
-                f"Score: {game['score']}/100\n\n"
+            growth = game.get("growth", 0)
+            growth_text = f"+{growth}%" if growth > 0 else f"{growth}%"
+
+            message = (
+                f"🎮 **{game['name']}**\n\n"
+                f"👥 Players:\n{game['playing']:,}\n\n"
+                f"📈 Growth:\n{growth_text}\n\n"
+                f"⭐ Score:\n{game['score']}/100\n\n"
+                f"📝 Why:\n{_reasons(game)}"
             )
 
-        await interaction.followup.send(message)
+            await interaction.followup.send(message)

@@ -1,0 +1,299 @@
+Great. Before moving on, you have now built the **first rough scout pipeline**:
+
+```text
+Discord
+   ↓
+/scan
+   ↓
+Find games
+   ↓
+Get stats
+   ↓
+Score games
+   ↓
+Show results
+```
+
+Now we move into **Day 3 — Making the scout actually useful.**
+
+The current problem:
+
+* It finds games, but it does not know if a game is **growing**
+* A game with 50,000 players could be old and declining
+* A game with 500 players could be exploding
+
+The next feature is **trend detection**.
+
+---
+
+# DAY 3 — Step 1: Create Game History Tracking
+
+We need the bot to remember:
+
+Example:
+
+```
+Monday:
+Players: 500
+
+Tuesday:
+Players: 900
+
+Wednesday:
+Players: 2000
+```
+
+Then:
+
+```
+Growth:
++300%
+```
+
+---
+
+## Step 1.1 — Update Database
+
+Open:
+
+```text
+database.py
+```
+
+Add this function:
+
+```python
+def save_game_snapshot(game):
+
+    conn = sqlite3.connect(DATABASE)
+    cursor = conn.cursor()
+
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS game_history (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        game_id INTEGER,
+        players INTEGER,
+        visits INTEGER,
+        timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+    """)
+
+    cursor.execute("""
+    INSERT INTO game_history
+    (game_id, players, visits)
+    VALUES (?, ?, ?)
+    """,
+    (
+        game["id"],
+        game["playing"],
+        game["visits"]
+    ))
+
+    conn.commit()
+    conn.close()
+```
+
+This creates a history log.
+
+---
+
+# Step 2 — Save Games During Scans
+
+Open:
+
+```text
+scanner.py
+```
+
+At the top add:
+
+```python
+from database import save_game_snapshot
+```
+
+Inside your scanning loop:
+
+After:
+
+```python
+if info:
+```
+
+add:
+
+```python
+save_game_snapshot(info)
+```
+
+Now every scan records:
+
+* Players
+* Visits
+* Time
+
+---
+
+# Step 3 — Create Growth Calculator
+
+Create:
+
+```text
+growth.py
+```
+
+Add:
+
+```python
+import sqlite3
+
+DATABASE = "scoutbot.db"
+
+
+def get_growth(game_id):
+
+    conn = sqlite3.connect(DATABASE)
+    cursor = conn.cursor()
+
+    cursor.execute("""
+    SELECT players
+    FROM game_history
+    WHERE game_id = ?
+    ORDER BY timestamp DESC
+    LIMIT 2
+    """,
+    (game_id,))
+
+
+    data = cursor.fetchall()
+
+    conn.close()
+
+
+    if len(data) < 2:
+        return 0
+
+
+    current = data[0][0]
+    previous = data[1][0]
+
+
+    if previous == 0:
+        return 0
+
+
+    growth = (
+        (current - previous)
+        / previous
+    ) * 100
+
+
+    return round(growth, 2)
+```
+
+---
+
+# Step 4 — Add Growth To Score
+
+Open:
+
+```text
+scanner.py
+```
+
+Find:
+
+```python
+calculate_score(game)
+```
+
+Add:
+
+```python
+from growth import get_growth
+```
+
+Then add:
+
+```python
+growth = get_growth(game["id"])
+
+
+if growth >= 100:
+    score += 30
+
+elif growth >= 50:
+    score += 15
+```
+
+Now scoring becomes:
+
+```
+Players
++
+Visits
++
+Favorites
++
+Growth
+=
+Opportunity Score
+```
+
+---
+
+# Step 5 — Improve `/scan` Output
+
+Instead of:
+
+```
+Game:
+Score: 80
+```
+
+Make it:
+
+```
+🎮 Game Found
+
+Name:
+Mining Simulator
+
+Players:
+2,500
+
+Growth:
++120%
+
+Score:
+92/100
+
+Why:
+✅ Fast player growth
+✅ High activity
+✅ Strong engagement
+```
+
+---
+
+## After This Step Your Bot Has:
+
+✅ Game discovery
+✅ Game stats
+✅ Database memory
+✅ Growth tracking
+✅ Better scoring
+
+---
+
+The next major feature after this is **RoTrends integration + custom filters**, where users can say:
+
+```
+/scan
+
+Minimum players: 500
+Maximum age: 30 days
+Genre: Simulator
+Minimum growth: 50%
+```
+
+That is when it starts becoming a tool you could actually use for finding Roblox opportunities.

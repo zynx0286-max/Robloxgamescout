@@ -1,5 +1,7 @@
 from game_search import search_games
 from roblox_api import get_game_info
+from database import save_game_snapshot
+from growth import get_growth
 
 
 def calculate_score(game):
@@ -22,6 +24,15 @@ def calculate_score(game):
         score += 20
     elif game["favorites"] >= 10000:
         score += 10
+
+    # Growth trend
+    growth = get_growth(game["id"])
+    game["growth"] = growth
+
+    if growth >= 100:
+        score += 30
+    elif growth >= 50:
+        score += 15
 
     return score
 
@@ -49,6 +60,7 @@ def scan_games():
         )
 
         if info:
+            save_game_snapshot(info)
             found_games.append(info)
 
     return rank_games(found_games)
