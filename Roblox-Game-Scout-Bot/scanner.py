@@ -1,3 +1,7 @@
+from game_search import search_games
+from roblox_api import get_game_info
+
+
 def calculate_score(game):
     score = 0
 
@@ -32,3 +36,19 @@ def rank_games(games):
     )
 
     return games
+
+
+def scan_games():
+    found_games = []
+
+    games = search_games()
+
+    for game in games:
+        info = get_game_info(
+            game["id"]
+        )
+
+        if info:
+            found_games.append(info)
+
+    return rank_games(found_games)

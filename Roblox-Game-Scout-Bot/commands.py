@@ -2,7 +2,7 @@ import discord
 from discord import app_commands
 from database import add_user, get_user, update_user
 from roblox_api import get_game_info
-from scanner import calculate_score
+from scanner import calculate_score, scan_games
 
 
 def setup_commands(tree: app_commands.CommandTree):
@@ -123,3 +123,29 @@ Genre:
         await interaction.response.send_message(
             f"Game Scout Score: {score}/100"
         )
+
+    @tree.command(name="scan", description="Find trending Roblox games")
+    async def scan(interaction: discord.Interaction):
+        await interaction.response.send_message(
+            "🔎 Scanning Roblox games..."
+        )
+
+        results = scan_games()
+
+        if not results:
+            await interaction.followup.send(
+                "No games found."
+            )
+            return
+
+        message = "🎮 Top Roblox Opportunities\n\n"
+
+        for game in results[:5]:
+            message += (
+                f"**{game['name']}**\n"
+                f"Players: {game['playing']:,}\n"
+                f"Visits: {game['visits']:,}\n"
+                f"Score: {game['score']}/100\n\n"
+            )
+
+        await interaction.followup.send(message)

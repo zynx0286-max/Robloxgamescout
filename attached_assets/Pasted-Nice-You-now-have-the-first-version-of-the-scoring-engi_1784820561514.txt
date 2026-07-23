@@ -1,0 +1,251 @@
+Nice. You now have the **first version of the scoring engine**. Now we move to the most important part of Day 2:
+
+# Step 11 — Build Automatic Game Discovery
+
+Currently:
+
+```text
+/game [place_id]
+        ↓
+Gets one game
+```
+
+We want:
+
+```text
+/scan
+        ↓
+Find games
+        ↓
+Collect stats
+        ↓
+Score them
+        ↓
+Show opportunities
+```
+
+---
+
+## Step 11.1 — Create `game_search.py`
+
+Create a new file:
+
+```text
+game_search.py
+```
+
+Your project:
+
+```text
+Roblox-Game-Scout-Bot
+
+main.py
+database.py
+roblox_api.py
+scanner.py
+game_search.py  ← NEW
+```
+
+Paste:
+
+```python
+import requests
+
+
+def search_games():
+
+    url = "https://games.roblox.com/v1/games/list"
+
+    params = {
+        "sortOrder": "Desc",
+        "limit": 10
+    }
+
+    response = requests.get(
+        url,
+        params=params
+    )
+
+    if response.status_code != 200:
+        return []
+
+    data = response.json()
+
+    return data.get("data", [])
+```
+
+---
+
+## Step 11.2 — Test Game Search
+
+Create:
+
+```text
+test_search.py
+```
+
+Paste:
+
+```python
+from game_search import search_games
+
+
+games = search_games()
+
+for game in games:
+    print(game)
+```
+
+Run:
+
+```bash
+python test_search.py
+```
+
+---
+
+## Important Note
+
+Roblox changes some discovery endpoints frequently. If this endpoint fails, that is normal — we will adjust it. The goal right now is testing the connection.
+
+---
+
+# Step 12 — Connect Search + Scoring
+
+Now update `scanner.py`.
+
+Add:
+
+```python
+from game_search import search_games
+from roblox_api import get_game_info
+
+
+def scan_games():
+
+    found_games = []
+
+    games = search_games()
+
+    for game in games:
+
+        info = get_game_info(
+            game["id"]
+        )
+
+        if info:
+            found_games.append(info)
+
+    return rank_games(found_games)
+```
+
+Now your flow is:
+
+```text
+Roblox Discovery
+        ↓
+Game IDs
+        ↓
+Game Stats
+        ↓
+Score
+        ↓
+Ranking
+```
+
+---
+
+# Step 13 — Add `/scan`
+
+In `main.py` add:
+
+```python
+@bot.tree.command(
+    name="scan",
+    description="Find trending Roblox games"
+)
+async def scan(interaction: discord.Interaction):
+
+    from scanner import scan_games
+
+    await interaction.response.send_message(
+        "🔎 Scanning Roblox games..."
+    )
+
+    results = scan_games()
+
+    if not results:
+        await interaction.followup.send(
+            "No games found."
+        )
+        return
+
+
+    message = "🎮 Top Roblox Opportunities\n\n"
+
+    for game in results[:5]:
+
+        message += (
+            f"**{game['name']}**\n"
+            f"Players: {game['playing']:,}\n"
+            f"Visits: {game['visits']:,}\n"
+            f"Score: {game['score']}/100\n\n"
+        )
+
+    await interaction.followup.send(message)
+```
+
+---
+
+# Step 14 — Test
+
+Restart your bot.
+
+In Discord:
+
+```text
+/scan
+```
+
+Expected:
+
+```text
+🔎 Scanning Roblox games...
+
+🎮 Top Roblox Opportunities
+
+Game A
+Players: 5,000
+Visits: 2,000,000
+Score: 80/100
+
+Game B
+Players: 1,200
+Visits: 500,000
+Score: 60/100
+```
+
+---
+
+## End of Day 2 Goal
+
+After this:
+
+✅ Discord bot
+✅ Database
+✅ Roblox API
+✅ Game lookup
+✅ Scoring system
+✅ Automatic scanning prototype
+
+---
+
+After this, we move into **Day 3**, where the bot becomes much smarter:
+
+* RoTrends integration
+* Growth tracking
+* "Is this game blowing up?" detection
+* Better scoring
+* Custom filters from `/settings`
+
+The important thing: do not add AI yet. You are building the data engine first. AI comes after the bot has good data.
