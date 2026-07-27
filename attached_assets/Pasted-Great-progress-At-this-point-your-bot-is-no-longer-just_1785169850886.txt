@@ -1,0 +1,147 @@
+Great progress. At this point your bot is no longer just a scanner — it has the beginnings of a real monitoring system.
+
+I would **not move to Smart Filters yet.** I would add **management commands first** because your database is starting to collect things users need to control.
+
+Right now you have:
+
+* `/watchlist` → view saved games
+* 👀 Watch button → add tracking
+* ❌ Ignore → block games
+
+But there is no way to manage watched games after adding them.
+
+## Next step: Add `/unwatch`
+
+Have Replit build:
+
+```text
+/unwatch <game_id>
+```
+
+Example:
+
+```
+/unwatch 994732206
+```
+
+Bot:
+
+```
+✅ Removed Blox Fruits from your tracked games.
+```
+
+---
+
+### Replit prompt:
+
+```
+Add an /unwatch command.
+
+Requirements:
+
+- Add a slash command: /unwatch game_id
+- Remove that game from watched_games for the current user.
+- If the user is not watching the game, return a helpful message.
+- Keep all existing functionality unchanged.
+- Add a /watched command that shows currently tracked games separately from /watchlist.
+```
+
+---
+
+Why add `/watched` too?
+
+Because your current naming is confusing:
+
+`/watchlist` currently means saved bookmarks.
+
+You should eventually have:
+
+```
+/saved
+Shows bookmarked games
+
+/watched
+Shows actively tracked games
+
+/ignored
+Shows games you blocked
+```
+
+A cleaner product structure:
+
+```
+📚 Saved
+"I like this game"
+
+👀 Watched
+"Track this game's growth"
+
+🚫 Ignored
+"Never show this again"
+```
+
+---
+
+After that, move into **Smart Filters**.
+
+Your bot's current pipeline:
+
+```
+Roblox Data
+     ↓
+Scanner
+     ↓
+Filters (basic)
+     ↓
+Alerts
+     ↓
+Watch Tracker
+```
+
+The next upgrade is making the filter layer intelligent:
+
+Example:
+
+```
+/settings
+
+Minimum CCU:
+500
+
+Maximum Visits:
+5M
+
+Growth:
+20%+
+
+Game Age:
+< 60 days
+
+Genres:
+Simulator, Tycoon
+
+Only show:
+☑ Recently Updated
+☑ Rising Games
+☑ New Developers
+```
+
+Then your scanner stops saying:
+
+> "Here are popular games"
+
+and starts saying:
+
+> "Here are games matching your investment criteria."
+
+---
+
+My recommended order from here:
+
+1. ✅ `/unwatch` + `/watched`
+2. Smart Filters
+3. Better Scout Score
+4. Developer Intelligence
+5. Gemini AI analysis
+
+You are at the point where adding organization features before AI will make the bot much easier to use and scale.

@@ -385,3 +385,67 @@ def update_watched_game_snapshot(game_id, players, visits):
 
     conn.commit()
     conn.close()
+
+
+def unwatch_game_for_user(user_id, game_id):
+    """Remove a watched game for a specific user. Returns rows deleted."""
+    conn = sqlite3.connect(DATABASE)
+    cursor = conn.cursor()
+
+    cursor.execute("""
+    DELETE FROM watched_games
+    WHERE user_id = ? AND game_id = ?
+    """, (user_id, int(game_id)))
+
+    removed = cursor.rowcount
+    conn.commit()
+    conn.close()
+    return removed
+
+
+def is_user_watching(user_id, game_id):
+    """Return True if this user has this game in watched_games."""
+    conn = sqlite3.connect(DATABASE)
+    cursor = conn.cursor()
+
+    cursor.execute("""
+    SELECT 1 FROM watched_games
+    WHERE user_id = ? AND game_id = ?
+    """, (user_id, int(game_id)))
+
+    exists = cursor.fetchone() is not None
+    conn.close()
+    return exists
+
+
+def get_ignored_games_for_user(user_id):
+    """Return all games a user has ignored."""
+    conn = sqlite3.connect(DATABASE)
+    cursor = conn.cursor()
+
+    cursor.execute("""
+    SELECT game_id, date_ignored
+    FROM ignored_games
+    WHERE user_id = ?
+    ORDER BY date_ignored DESC
+    """, (user_id,))
+
+    rows = cursor.fetchall()
+    conn.close()
+    return rows
+
+
+def unignore_game_for_user(user_id, game_id):
+    """Remove an ignored game for a specific user. Returns rows deleted."""
+    conn = sqlite3.connect(DATABASE)
+    cursor = conn.cursor()
+
+    cursor.execute("""
+    DELETE FROM ignored_games
+    WHERE user_id = ? AND game_id = ?
+    """, (user_id, int(game_id)))
+
+    removed = cursor.rowcount
+    conn.commit()
+    conn.close()
+    return removed

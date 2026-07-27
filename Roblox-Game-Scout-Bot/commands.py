@@ -1,6 +1,16 @@
 import discord
 from discord import app_commands
-from database import add_user, get_user, update_user, get_saved_games_for_user
+from database import (
+    add_user,
+    get_user,
+    update_user,
+    get_saved_games_for_user,
+    get_watched_games_for_user,
+    get_ignored_games_for_user,
+    unwatch_game_for_user,
+    unignore_game_for_user,
+    is_user_watching,
+)
 from roblox_api import get_game_info
 from scanner import calculate_score, scan_games
 from categories import get_category
@@ -299,27 +309,152 @@ Scanning...
 
         await interaction.followup.send(message)
 
-    @tree.command(name="watchlist", description="View your saved games")
+    @tree.command(name="watchlist", description="View your saved (bookmarked) games")
+    @tree.command(name="saved", description="View your saved (bookmarked) games")
     async def watchlist(interaction: discord.Interaction):
         user_id = interaction.user.id
         saved = get_saved_games_for_user(user_id)
 
         if not saved:
             await interaction.response.send_message(
-                "Your watchlist is empty. Use the 💾 Save Game button on a scan result."
+                "📚 Your saved list is empty. Use **💾 Save** on a scan result to bookmark a game."
             )
             return
 
         embed = discord.Embed(
-            title="💾 Saved Games",
+            title="📚 Saved Games",
+            description="Bookmarks — games you want to remember.",
             color=discord.Color.blue(),
         )
 
         for game_id, game_name, date_saved in saved:
             embed.add_field(
-                name=game_name,
+                name=f"🎮 {game_name}",
                 value=f"ID: `{game_id}` | Saved: {date_saved[:10]}",
                 inline=False
             )
 
         await interaction.response.send_message(embed=embed)
+
+    @tree.command(name="watched", description="View your actively tracked games")
+    async def watched(interaction: discord.Interaction):
+        user_id = interaction.user.id
+        tracked = get_watched_games_for_user(user_id)
+
+        if not tracked:
+            await interaction.response.send_message(
+                "👀 You're not tracking any games yet. Use the **👀 Watch** button on a scan result to monitor a game's growth."
+            )
+            return
+
+        embed = discord.Embed(
+            title="👀 Watched Games",
+            description="Tracker — the bot monitors these for major CCU/visits changes.",
+            color=discord.Color.orange(),
+        )
+
+        for game_id, game_name, last_players, last_visits, date_added in tracked:
+            players_text = f"{last_players:,}" if last_players is not None else "—"
+            embed.add_field(
+                name=f"🎮 {game_name}",
+                value=(
+                    f"ID: `{game_id}`  |  Last CCU: {players_text}\n"
+                    f"Tracking since: {date_added[:10]}"
+                ),
+                inline=False,
+            )
+
+        embed.set_footer(text="Remove with /unwatch <game_id>")
+        await interaction.response.send_message(embed=embed)
+
+    @tree.command(name="ignored", description="View games you've ignored")
+    async def ignored(interaction: discord.Interaction):
+        user_id = interaction.user.id
+        blocked = get_ignored_games_for_user(user_id)
+
+        if not blocked:
+            await interaction.response.send_message(
+                "🚫 You haven't ignored any games yet."
+            )
+            return
+
+        embed = discord.Embed(
+            title="🚫 Ignored Games",
+            description="These games will never appear in alerts again.",
+            color=discord.Color.greyple(),
+        )
+
+        for game_id, date_ignored in blocked:
+            embed.add_field(
+                name=f"Game ID: `{game_id}`",
+                value=f"Ignored: {date_ignored[:10]}",
+                inline=False,
+            )
+
+        embed.set_footer(text="Unblock with /unignore <game_id>")
+        await interaction.response.send_message(embed=embed)
+
+    @tree.command(
+        name="unwatch",
+        description="Stop tracking a game"
+    )
+    @app_commands.describe(game_id="Roblox Universe ID to stop watching")
+    async def unwatch(interaction: discord.Interaction, game_id: str):
+        try:
+            numeric_id = int(game_id)
+        except ValueError:
+            await interaction.response.send_message(
+                "❌ Game ID must be a number, e.g. `994732206` for Blox Fruits.",
+                ephemeral=True,
+            )
+            return
+
+        user_id = interaction.user.id
+
+        if not is_user_watching(user_id, numeric_id):
+            await interaction.response.send_message(
+                f"❌ You're not tracking game `{numeric_id}`.\n"
+                f"Use **/watched** to see what you are tracking.",
+                ephemeral=True,
+            )
+            return
+
+        removed = unwatch_game_for_user(user_id, numeric_id)
+        if removed:
+            await interaction.response.send_message(
+                f"✅ Removed game `{numeric_id}` from your tracked games.",
+                ephemeral=True,
+            )
+        else:
+            await interaction.response.send_message(
+                f"⚠️ Could not remove game `{numeric_id}` — try again.",
+                ephemeral=True,
+            )
+
+    @tree.command(
+        name="unignore",
+        description="Allow a previously ignored game to appear in alerts again"
+    )
+    @app_commands.describe(game_id="Roblox Universe ID to stop ignoring")
+    async def unignore(interaction: discord.Interaction, game_id: str):
+        try:
+            numeric_id = int(game_id)
+        except ValueError:
+            await interaction.response.send_message(
+                "❌ Game ID must be a number.",
+                ephemeral=True,
+            )
+            return
+
+        user_id = interaction.user.id
+        removed = unignore_game_for_user(user_id, numeric_id)
+        if removed:
+            await interaction.response.send_message(
+                f"✅ Game `{numeric_id}` can appear in alerts again.",
+                ephemeral=True,
+            )
+        else:
+            await interaction.response.send_message(
+                f"ℹ️ You weren't ignoring game `{numeric_id}`.",
+                ephemeral=True,
+            )
