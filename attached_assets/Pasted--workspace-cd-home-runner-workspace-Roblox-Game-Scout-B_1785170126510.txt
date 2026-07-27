@@ -1,0 +1,158 @@
+~/workspace$ cd /home/runner/workspace/Roblox-Game-Scout-Bot && python main.py
+2026-07-27 16:20:21 INFO     discord.client logging in using static token
+Slash commands synced to test server: 1530596385261621308
+Old global commands cleared
+2026-07-27 16:20:23 INFO     discord.gateway Shard ID None has connected to Gateway (Session ID: a147d3c296fee59cb7edf3b21e5d3f79).
+Logged in as Roblox Game Scout#6583
+2026-07-27 16:20:39 ERROR    discord.app_commands.tree Ignoring exception in command 'testbuttons'
+Traceback (most recent call last):
+  File "/home/runner/workspace/.pythonlibs/lib/python3.11/site-packages/discord/app_commands/commands.py", line 859, in _do_call
+    return await self._callback(interaction, **params)  # type: ignore
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/runner/workspace/Roblox-Game-Scout-Bot/commands.py", line 78, in testbuttons
+    view=AlertButtons(sample_game),
+         ^^^^^^^^^^^^
+NameError: name 'AlertButtons' is not defined
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "/home/runner/workspace/.pythonlibs/lib/python3.11/site-packages/discord/app_commands/tree.py", line 1302, in _call
+    await command._invoke_with_namespace(interaction, namespace)
+  File "/home/runner/workspace/.pythonlibs/lib/python3.11/site-packages/discord/app_commands/commands.py", line 884, in _invoke_with_namespace
+    return await self._do_call(interaction, transformed_values)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/runner/workspace/.pythonlibs/lib/python3.11/site-packages/discord/app_commands/commands.py", line 877, in _do_call
+    raise CommandInvokeError(self, e) from e
+discord.app_commands.errors.CommandInvokeError: Command 'testbuttons' raised an exception: NameError: name 'AlertButtons' is not defined
+7
+^Z
+[1]+  Stopped                 python main.py
+~/workspace/Roblox-Game-Scout-Bot$ ^C
+~/workspace/Roblox-Game-Scout-Bot$ ^C
+~/workspace/Roblox-Game-Scout-Bot$ ^[[200~cd /home/runner/workspace/Roblox-Game-Scout-Bot && python main.py~
+cd /home/runner/workspace/Roblox-Game-Scout-Bot && python main.py~bash: cd: command not found
+~/workspace/Roblox-Game-Scout-Bot$ cd /home/runner/workspace/Roblox-Game-Scout-Bot && python main.py
+2026-07-27 16:22:12 INFO     discord.client logging in using static token
+Slash commands synced to test server: 1530596385261621308
+Old global commands cleared
+2026-07-27 16:22:13 INFO     discord.gateway Shard ID None has connected to Gateway (Session ID: 5868eb1b35528295b8aad79af3b68a6a).
+Logged in as Roblox Game Scout#6583
+z
+^Z
+[2]+  Stopped                 python main.py
+~/workspace/Roblox-Game-Scout-Bot$ cd /home/runner/workspace/Roblox-Game-Scout-Bot && python main.py
+2026-07-27 16:26:00 INFO     discord.client logging in using static token
+Slash commands synced to test server: 1530596385261621308
+Old global commands cleared
+2026-07-27 16:26:01 INFO     discord.gateway Shard ID None has connected to Gateway (Session ID: 3a416f423b8c561ed7316aedfa39a75b).
+Logged in as Roblox Game Scout#6583
+z
+^Z
+[3]+  Stopped                 python main.py
+~/workspace/Roblox-Game-Scout-Bot$ ^C
+~/workspace/Roblox-Game-Scout-Bot$ cd /home/runner/workspace/Roblox-Game-Scout-Bot && python main.py
+2026-07-27 16:29:42 INFO     discord.client logging in using static token
+Slash commands synced to test server: 1530596385261621308
+Old global commands cleared
+2026-07-27 16:29:43 INFO     discord.gateway Shard ID None has connected to Gateway (Session ID: 10e45311cb820230e8f9efc02e0f6783).
+Logged in as Roblox Game Scout#6583
+z
+^Z
+[4]+  Stopped                 python main.py
+~/workspace/Roblox-Game-Scout-Bot$ ^C
+~/workspace/Roblox-Game-Scout-Bot$ cd /home/runner/workspace/Roblox-Game-Scout-Bot && python main.py
+2026-07-27 16:32:06 INFO     discord.client logging in using static token
+Traceback (most recent call last):
+  File "/home/runner/workspace/Roblox-Game-Scout-Bot/main.py", line 52, in <module>
+    bot.run(TOKEN)
+  File "/home/runner/workspace/.pythonlibs/lib/python3.11/site-packages/discord/client.py", line 933, in run
+    asyncio.run(runner())
+  File "/nix/store/6334pjf6w2q623rgvwi499qaiym1p6yv-python3-3.11.14/lib/python3.11/asyncio/runners.py", line 190, in run
+    return runner.run(main)
+           ^^^^^^^^^^^^^^^^
+  File "/nix/store/6334pjf6w2q623rgvwi499qaiym1p6yv-python3-3.11.14/lib/python3.11/asyncio/runners.py", line 118, in run
+    return self._loop.run_until_complete(task)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/nix/store/6334pjf6w2q623rgvwi499qaiym1p6yv-python3-3.11.14/lib/python3.11/asyncio/base_events.py", line 654, in run_until_complete
+    return future.result()
+           ^^^^^^^^^^^^^^^
+  File "/home/runner/workspace/.pythonlibs/lib/python3.11/site-packages/discord/client.py", line 922, in runner
+    await self.start(token, reconnect=reconnect)
+  File "/home/runner/workspace/.pythonlibs/lib/python3.11/site-packages/discord/client.py", line 850, in start
+    await self.login(token)
+  File "/home/runner/workspace/.pythonlibs/lib/python3.11/site-packages/discord/client.py", line 693, in login
+    await self.setup_hook()
+  File "/home/runner/workspace/Roblox-Game-Scout-Bot/main.py", line 22, in setup_hook
+    setup_commands(self.tree)
+  File "/home/runner/workspace/Roblox-Game-Scout-Bot/commands.py", line 312, in setup_commands
+    @tree.command(name="watchlist", description="View your saved (bookmarked) games")
+     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/runner/workspace/.pythonlibs/lib/python3.11/site-packages/discord/app_commands/tree.py", line 912, in decorator
+    raise TypeError('command function must be a coroutine function')
+TypeError: command function must be a coroutine function
+~/workspace/Roblox-Game-Scout-Bot$ cd /home/runner/workspace/Roblox-Game-Scout-Bot && python main.py
+[1]   Killed                  python main.py
+[2]   Killed                  python main.py
+[3]-  Killed                  python main.py
+[4]+  Killed                  python main.py
+2026-07-27 16:34:04 INFO     discord.client logging in using static token
+Traceback (most recent call last):
+  File "/home/runner/workspace/Roblox-Game-Scout-Bot/main.py", line 52, in <module>
+    bot.run(TOKEN)
+  File "/home/runner/workspace/.pythonlibs/lib/python3.11/site-packages/discord/client.py", line 933, in run
+    asyncio.run(runner())
+  File "/nix/store/6334pjf6w2q623rgvwi499qaiym1p6yv-python3-3.11.14/lib/python3.11/asyncio/runners.py", line 190, in run
+    return runner.run(main)
+           ^^^^^^^^^^^^^^^^
+  File "/nix/store/6334pjf6w2q623rgvwi499qaiym1p6yv-python3-3.11.14/lib/python3.11/asyncio/runners.py", line 118, in run
+    return self._loop.run_until_complete(task)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/nix/store/6334pjf6w2q623rgvwi499qaiym1p6yv-python3-3.11.14/lib/python3.11/asyncio/base_events.py", line 654, in run_until_complete
+    return future.result()
+           ^^^^^^^^^^^^^^^
+  File "/home/runner/workspace/.pythonlibs/lib/python3.11/site-packages/discord/client.py", line 922, in runner
+    await self.start(token, reconnect=reconnect)
+  File "/home/runner/workspace/.pythonlibs/lib/python3.11/site-packages/discord/client.py", line 850, in start
+    await self.login(token)
+  File "/home/runner/workspace/.pythonlibs/lib/python3.11/site-packages/discord/client.py", line 693, in login
+    await self.setup_hook()
+  File "/home/runner/workspace/Roblox-Game-Scout-Bot/main.py", line 22, in setup_hook
+    setup_commands(self.tree)
+  File "/home/runner/workspace/Roblox-Game-Scout-Bot/commands.py", line 312, in setup_commands
+    @tree.command(name="watchlist", description="View your saved (bookmarked) games")
+     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/runner/workspace/.pythonlibs/lib/python3.11/site-packages/discord/app_commands/tree.py", line 912, in decorator
+    raise TypeError('command function must be a coroutine function')
+TypeError: command function must be a coroutine function
+~/workspace/Roblox-Game-Scout-Bot$ cd /home/runner/workspace/Roblox-Game-Scout-Bot && python main.py 2>&1 | tee bot.log
+[2026-07-27 16:35:04] [INFO    ] discord.client: logging in using static token
+Traceback (most recent call last):
+  File "/home/runner/workspace/Roblox-Game-Scout-Bot/main.py", line 52, in <module>
+    bot.run(TOKEN)
+  File "/home/runner/workspace/.pythonlibs/lib/python3.11/site-packages/discord/client.py", line 933, in run
+    asyncio.run(runner())
+  File "/nix/store/6334pjf6w2q623rgvwi499qaiym1p6yv-python3-3.11.14/lib/python3.11/asyncio/runners.py", line 190, in run
+    return runner.run(main)
+           ^^^^^^^^^^^^^^^^
+  File "/nix/store/6334pjf6w2q623rgvwi499qaiym1p6yv-python3-3.11.14/lib/python3.11/asyncio/runners.py", line 118, in run
+    return self._loop.run_until_complete(task)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/nix/store/6334pjf6w2q623rgvwi499qaiym1p6yv-python3-3.11.14/lib/python3.11/asyncio/base_events.py", line 654, in run_until_complete
+    return future.result()
+           ^^^^^^^^^^^^^^^
+  File "/home/runner/workspace/.pythonlibs/lib/python3.11/site-packages/discord/client.py", line 922, in runner
+    await self.start(token, reconnect=reconnect)
+  File "/home/runner/workspace/.pythonlibs/lib/python3.11/site-packages/discord/client.py", line 850, in start
+    await self.login(token)
+  File "/home/runner/workspace/.pythonlibs/lib/python3.11/site-packages/discord/client.py", line 693, in login
+    await self.setup_hook()
+  File "/home/runner/workspace/Roblox-Game-Scout-Bot/main.py", line 22, in setup_hook
+    setup_commands(self.tree)
+  File "/home/runner/workspace/Roblox-Game-Scout-Bot/commands.py", line 312, in setup_commands
+    @tree.command(name="watchlist", description="View your saved (bookmarked) games")
+     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/runner/workspace/.pythonlibs/lib/python3.11/site-packages/discord/app_commands/tree.py", line 912, in decorator
+    raise TypeError('command function must be a coroutine function')
+TypeError: command function must be a coroutine function
+~/workspace/Roblox-Game-Scout-Bot$ 

@@ -309,9 +309,8 @@ Scanning...
 
         await interaction.followup.send(message)
 
-    @tree.command(name="watchlist", description="View your saved (bookmarked) games")
-    @tree.command(name="saved", description="View your saved (bookmarked) games")
-    async def watchlist(interaction: discord.Interaction):
+    async def _show_saved_list(interaction: discord.Interaction):
+        """Shared implementation for /saved and /watchlist."""
         user_id = interaction.user.id
         saved = get_saved_games_for_user(user_id)
 
@@ -331,10 +330,18 @@ Scanning...
             embed.add_field(
                 name=f"🎮 {game_name}",
                 value=f"ID: `{game_id}` | Saved: {date_saved[:10]}",
-                inline=False
+                inline=False,
             )
 
         await interaction.response.send_message(embed=embed)
+
+    @tree.command(name="saved", description="View your saved (bookmarked) games")
+    async def saved(interaction: discord.Interaction):
+        await _show_saved_list(interaction)
+
+    @tree.command(name="watchlist", description="Alias of /saved (legacy)")
+    async def watchlist(interaction: discord.Interaction):
+        await _show_saved_list(interaction)
 
     @tree.command(name="watched", description="View your actively tracked games")
     async def watched(interaction: discord.Interaction):
