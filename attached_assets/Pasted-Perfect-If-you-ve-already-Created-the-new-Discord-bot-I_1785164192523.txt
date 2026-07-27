@@ -1,0 +1,110 @@
+Perfect. If you've already:
+
+* ✅ Created the new Discord bot
+* ✅ Invited it to your server
+* ✅ Added the token to Replit Secrets
+* ✅ Started the bot successfully
+
+then **don't jump into adding lots of features yet.** First, make sure the bot is actually connected correctly.
+
+## Step 1: Start the bot
+
+Run your project.
+
+Your console should show something similar to:
+
+```text
+Logged in as Roblox Game Scout#1234
+Synced 8 commands.
+```
+
+If you see errors, send me the full console output before moving on.
+
+---
+
+## Step 2: Test slash commands
+
+In your Discord server, type:
+
+```text
+/
+```
+
+You should see commands like:
+
+* `/scan`
+* `/trending`
+* `/watchlist`
+* or whatever you've already implemented.
+
+If no commands appear after about a minute, tell me—that usually means the command sync isn't working.
+
+---
+
+## Step 3: Test every existing command
+
+Run each command you already have.
+
+Check for:
+
+* Does it respond?
+* Does the embed look correct?
+* Are there any errors in the console?
+* Does it take too long?
+
+Don't worry about making them look perfect yet—just verify they work.
+
+---
+
+## Step 4: Test buttons
+
+If your embeds include buttons like:
+
+* Claim
+* Accept
+* Reject
+* Watch
+
+Click each one and verify:
+
+* The interaction succeeds.
+* No "Interaction Failed" message appears.
+* The correct action happens.
+
+---
+
+## Step 5: Verify the database
+
+Run a command that should save data (such as adding to a watchlist).
+
+Then confirm your SQLite database file (for example, `scout.db`) is created and that the data is actually being written.
+
+---
+
+### Once all of that passes...
+
+We'll move on to the first major feature:
+
+> **Automatic scanning.**
+
+Instead of only running `/scan`, the bot will:
+
+```
+Every 15–30 minutes
+        ↓
+Search Roblox
+        ↓
+Apply your filters
+        ↓
+Ignore games already seen
+        ↓
+Post only new opportunities to #alerts
+```
+
+This transforms it from a manual command bot into a true **Game Scout**.
+
+**Before we continue:** what happens when you run the bot now?
+
+* Does it start without errors?
+* Do your slash commands appear?
+* Or are you stuck on a specific step?
