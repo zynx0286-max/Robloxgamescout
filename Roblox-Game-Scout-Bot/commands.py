@@ -6,6 +6,7 @@ from database import (
     add_user,
     get_user_filters,
     get_user_row,
+    get_user_alert_level,
     update_user,
     get_saved_games_for_user,
     get_watched_games_for_user,
@@ -14,6 +15,36 @@ from database import (
     unignore_game_for_user,
     is_user_watching,
 )
+from priority import (
+    SETTING_ALL,
+    SETTING_MEDIUM_PLUS,
+    SETTING_HIGH_ONLY,
+    normalize_setting,
+)
+
+
+_ALERT_LEVEL_CHOICES = [
+    app_commands.Choice(
+        name="All — mention me on every alert",
+        value=SETTING_ALL,
+    ),
+    app_commands.Choice(
+        name="Medium+ — skip low priority",
+        value=SETTING_MEDIUM_PLUS,
+    ),
+    app_commands.Choice(
+        name="High Only — only breakouts ring the bell",
+        value=SETTING_HIGH_ONLY,
+    ),
+]
+
+
+# Human-readable label so /profile and /settings echo something readable.
+_PROMPT_ALERT_LEVEL = {
+    SETTING_ALL: "All",
+    SETTING_MEDIUM_PLUS: "Medium+",
+    SETTING_HIGH_ONLY: "High Only",
+}
 from roblox_api import get_game_info
 from scanner import calculate_score, scan_games, calculate_scout_score
 from growth import get_growth
@@ -156,6 +187,11 @@ def setup_commands(tree: app_commands.CommandTree):
             "genre": row[6] or "Any",
             "max_age": int(row[7] or 0),
         }
+        # alert_level is at row[8] now — index after the max_age migration.
+        raw_alert_level = (
+            row[8] if len(row) > 8 else get_user_alert_level(user_id)
+        )
+        f["alert_level"] = (raw_alert_level or "all").lower()
 
         def _v(x):
             return "— (no cap)" if x == 0 else f"{x:,}"
@@ -184,6 +220,9 @@ Genre Filter:
 
 Max Game Age:
 {f['max_age']} days
+
+🔔 Alert Level:
+{_PROMPT_ALERT_LEVEL.get(f['alert_level'], f['alert_level'])}
 """
         )
 
@@ -199,7 +238,9 @@ Max Game Age:
         min_growth="Minimum growth percentage (e.g. 30)",
         genre="Genre keyword to filter by (Simulator, RPG, Tycoon, Any…)",
         max_age="Maximum age in days (only enforced if timestamp is known)",
+        alert_level="How loud alerts are. Quiet low alerts aren't mentioned.",
     )
+    @app_commands.choices(alert_level=_ALERT_LEVEL_CHOICES)
     async def settings(
         interaction: discord.Interaction,
         min_visits: int = None,
@@ -209,10 +250,17 @@ Max Game Age:
         min_growth: int = None,
         genre: str = None,
         max_age: int = None,
+        alert_level: str = None,
     ):
         user_id = interaction.user.id
 
         add_user(user_id)
+
+        # Normalize before persisting so the stored value matches priority.py.
+        canonical_alert_level = (
+            normalize_setting(alert_level) if alert_level is not None else None
+        )
+
         update_user(
             user_id,
             minimum_visits=min_visits,
@@ -222,6 +270,7 @@ Max Game Age:
             minimum_growth=min_growth,
             genre=genre,
             max_age=max_age,
+            alert_level=canonical_alert_level,
         )
 
         f = get_user_filters(user_id)
@@ -242,6 +291,8 @@ Maximum Players: {_v(f['maximum_players'])}
 Minimum Growth: {f['minimum_growth']}%
 Genre Filter: {f['genre']}
 Max Game Age: {f['max_age']} days
+
+🔔 Alert Level: {_PROMPT_ALERT_LEVEL.get(f['alert_level'], f['alert_level'])}
 """.strip()
         )
 

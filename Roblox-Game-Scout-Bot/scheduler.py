@@ -14,6 +14,11 @@ from database import (
 from config import ALERT_CHANNEL_ID, SCAN_INTERVAL
 from embeds import create_alert_embed
 from buttons import AlertButtons
+from priority import (
+    HIGH as PRIORITY_HIGH,
+    MEDIUM as PRIORITY_MEDIUM,
+    LOW as PRIORITY_LOW,
+)
 
 logger = logging.getLogger("scheduler")
 
@@ -29,9 +34,28 @@ def _format_log(scan_count, matched, duplicates, alerts, seconds):
     )
 
 
+def _classify_scan_priority(game):
+    """Bucket a discovery-scan match into high / medium / low.
+
+    Discovery alerts go to a broadcast channel (no per-user delivery),
+    so we just stamp the priority on the embed so readers can scan by
+    severity instead of getting force-fed every match.
+    """
+    scout = game.get("scout_score") or {}
+    score = scout.get("total", 0) if isinstance(scout, dict) else 0
+    growth = float(game.get("growth", 0) or 0)
+
+    if growth >= 100 or score >= 85:
+        return PRIORITY_HIGH
+    if growth >= 25 or score >= 70:
+        return PRIORITY_MEDIUM
+    return PRIORITY_LOW
+
+
 async def _post_alert(channel, game):
     """Send a single alert embed with buttons to *channel*."""
-    embed = create_alert_embed(game)
+    priority = _classify_scan_priority(game)
+    embed = create_alert_embed(game, priority=priority)
     view = AlertButtons(game)
     await channel.send(embed=embed, view=view)
 

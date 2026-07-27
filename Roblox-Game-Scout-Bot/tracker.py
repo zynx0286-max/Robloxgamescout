@@ -5,11 +5,20 @@ import time
 from roblox_api import get_game_info
 from database import (
     get_all_watched_games,
+    get_user_alert_level,
     update_watched_game_snapshot,
     save_alert_log,
 )
 from config import ALERT_CHANNEL_ID
 from embeds import create_tracker_embed
+from priority import (
+    HIGH as PRIORITY_HIGH,
+    MEDIUM as PRIORITY_MEDIUM,
+    LOW as PRIORITY_LOW,
+    should_mention,
+    priority_emoji,
+    priority_label,
+)
 
 logger = logging.getLogger("tracker")
 
@@ -35,6 +44,21 @@ def _should_alert(players_delta, visits_delta):
         players_delta >= PLAYERS_GROWTH_THRESHOLD_PERCENT
         or visits_delta >= VISITS_GROWTH_THRESHOLD_PERCENT
     )
+
+
+def _classify_tracker_priority(players_delta, visits_delta):
+    """Bucket a tracker explosion into high / medium / low.
+
+    Matches the user's "Smart Notification Priority" example:
+      • players_delta >= 100%   → high    (BREAKOUT DETECTED)
+      • players_delta >= 25%    → medium  (Growing Opportunity)
+      • otherwise               → low     (Small Growth, embed-only)
+    """
+    if players_delta >= 100 or visits_delta >= 50:
+        return PRIORITY_HIGH
+    if players_delta >= 25 or visits_delta >= 10:
+        return PRIORITY_MEDIUM
+    return PRIORITY_LOW
 
 
 async def run_tracker(bot):
@@ -101,6 +125,9 @@ async def run_tracker(bot):
             continue
 
         try:
+            priority = _classify_tracker_priority(players_delta, visits_delta)
+            user_setting = get_user_alert_level(user_id)
+
             embed = create_tracker_embed(
                 game_name=game_name,
                 old_players=int(last_players or 0),
@@ -110,21 +137,35 @@ async def run_tracker(bot):
                 players_delta=players_delta,
                 visits_delta=visits_delta,
                 tracked_since=date_added,
+                priority=priority,
             )
-            # Ping the watcher via mention so they get a Discord notification
-            # even when away from the keyboard. Each (user_id, game_id) row
-            # produces its own ping, so co-watchers all get notified.
-            await alert_channel.send(
-                content=f"<@{user_id}> \ud83d\ude80 Major explosion on "
-                        f"**{game_name}** \u2014 check the embed below.",
-                embed=embed,
-            )
+
+            # Compose the message body. The "@user_id" mention is conditional
+            # on the user's alert_level setting; lower-priority alerts still
+            # post so the channel record stays complete, but only HIGH/MEDIUM
+            # (per user preference) actually ring the watcher's bell.
+            emoji = priority_emoji(priority)
+            label = priority_label(priority)
+
+            if should_mention(priority, user_setting):
+                body = (
+                    f"<@{user_id}> {emoji} **{label}** on **{game_name}** "
+                    f"— check the embed below."
+                )
+            else:
+                body = (
+                    f"{emoji} _Quietly tracked_ — **{label}** on **{game_name}** "
+                    f"({user_setting} alert level skips this)."
+                )
+
+            await alert_channel.send(content=body, embed=embed)
             tracker_alerts += 1
             logger.info(
-                "Tracker alert: %s (+%.1f%% CCU, +%.1f%% visits)",
+                "Tracker alert: %s priority=%s setting=%s +%.1f%% CCU",
                 game_name,
+                priority,
+                user_setting,
                 players_delta,
-                visits_delta,
             )
         except Exception as exc:
             save_alert_log("tracker_post_error", f"{game_name}: {exc}")

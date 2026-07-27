@@ -1,0 +1,22 @@
+# Python
+__pycache__/
+*.pyc
+
+# Environment secrets
+.env
+
+# Database
+scoutbot.db
+
+# Logs
+*.log
+
+# Replit files
+.replit
+
+__pycache__/
+*.pyc
+*.db
+*.log
+.replit
+attached_assets/

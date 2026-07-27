@@ -21,7 +21,8 @@ def _recreate_users_table(cursor):
         maximum_players INTEGER DEFAULT 0,
         minimum_growth INTEGER DEFAULT 0,
         genre TEXT DEFAULT 'Any',
-        max_age INTEGER DEFAULT 365
+        max_age INTEGER DEFAULT 365,
+        alert_level TEXT DEFAULT 'all'
     )
     """)
 
@@ -39,6 +40,7 @@ def create_database():
         "minimum_growth",
         "genre",
         "max_age",
+        "alert_level",
     }
 
     cursor.execute("""
@@ -50,7 +52,8 @@ def create_database():
         maximum_players INTEGER DEFAULT 0,
         minimum_growth INTEGER DEFAULT 0,
         genre TEXT DEFAULT 'Any',
-        max_age INTEGER DEFAULT 365
+        max_age INTEGER DEFAULT 365,
+        alert_level TEXT DEFAULT 'all'
     )
     """)
 
@@ -66,6 +69,8 @@ def create_database():
         cursor.execute("ALTER TABLE users ADD COLUMN maximum_visits INTEGER DEFAULT 0")
     if "maximum_players" not in existing_columns:
         cursor.execute("ALTER TABLE users ADD COLUMN maximum_players INTEGER DEFAULT 0")
+    if "alert_level" not in existing_columns:
+        cursor.execute("ALTER TABLE users ADD COLUMN alert_level TEXT DEFAULT 'all'")
 
     cursor.execute("""
     CREATE TABLE IF NOT EXISTS game_history (
@@ -201,8 +206,11 @@ def update_user(
     minimum_growth=None,
     genre=None,
     max_age=None,
+    alert_level=None,
 ):
     """Update user settings. Only updates fields that are provided."""
+    from priority import normalize_setting  # local import: keeps top-level clean.
+
     conn = sqlite3.connect(DATABASE)
     cursor = conn.cursor()
 
@@ -230,6 +238,9 @@ def update_user(
     if max_age is not None:
         fields.append("max_age = ?")
         values.append(int(max_age))
+    if alert_level is not None:
+        fields.append("alert_level = ?")
+        values.append(normalize_setting(alert_level))
 
     if fields:
         query = f"UPDATE users SET {', '.join(fields)} WHERE discord_id = ?"
@@ -250,7 +261,7 @@ def get_user_filters(discord_id):
     cursor.execute("""
     SELECT minimum_visits, maximum_visits,
            minimum_players, maximum_players,
-           minimum_growth, genre, max_age
+           minimum_growth, genre, max_age, alert_level
     FROM users
     WHERE discord_id = ?
     """, (discord_id,))
@@ -267,6 +278,7 @@ def get_user_filters(discord_id):
             "minimum_growth": 0,
             "genre": "Any",
             "max_age": 365,
+            "alert_level": "all",
         }
 
     return {
@@ -277,7 +289,20 @@ def get_user_filters(discord_id):
         "minimum_growth": int(row[4] or 0),
         "genre": row[5] or "Any",
         "max_age": int(row[6] or 0),
+        "alert_level": (row[7] or "all").lower(),
     }
+
+
+def get_user_alert_level(discord_id):
+    """Return the alert_level for a user, defaulting to 'all'."""
+    row = get_user_row(discord_id)
+    if row is None:
+        return "all"
+    # Index of alert_level depends on get_user_row's SELECT order — it does.
+    try:
+        return (row[8] or "all").lower()
+    except IndexError:
+        return "all"
 
 
 def get_user_row(discord_id):
@@ -288,7 +313,7 @@ def get_user_row(discord_id):
     cursor.execute(
         "SELECT discord_id, minimum_visits, maximum_visits, "
         "minimum_players, maximum_players, minimum_growth, "
-        "genre, max_age FROM users WHERE discord_id = ?",
+        "genre, max_age, alert_level FROM users WHERE discord_id = ?",
         (discord_id,),
     )
 

@@ -2,6 +2,13 @@ import time
 import discord
 from categories import get_category
 from opportunity import analyze_game, get_opportunity_level
+from priority import (
+    HIGH as PRIORITY_HIGH,
+    MEDIUM as PRIORITY_MEDIUM,
+    LOW as PRIORITY_LOW,
+    priority_emoji,
+    priority_label,
+)
 
 
 def _format_breakdown_lines(scout_score):
@@ -84,23 +91,41 @@ def create_game_embed(game):
     return embed
 
 
-def create_alert_embed(game):
-    """Create an alert embed for a newly discovered opportunity."""
+def create_alert_embed(game, priority=None):
+    """Create an alert embed for a newly discovered opportunity.
+
+    ``priority`` is one of "high"/"medium"/"low". The embed header mirrors
+    the priority bucket so channel readers can scan by severity.
+    """
     growth = game.get("growth", 0)
     growth_text = f"+{growth}%" if growth > 0 else f"{growth}%"
     place_id = game.get("place_id", game["id"])
     opportunity = get_opportunity_level(game)
     scout = game.get("scout_score") or {"total": game.get("score", 0), "breakdown": []}
 
-    if "🔥 HIGH" in opportunity:
+    if priority == PRIORITY_HIGH:
         color = discord.Color.gold()
+        title_prefix = "🚨 BREAKOUT"
+    elif priority == PRIORITY_MEDIUM:
+        color = discord.Color.orange()
+        title_prefix = "📈 Opportunity"
+    elif priority == PRIORITY_LOW:
+        color = discord.Color.blue()
+        title_prefix = "👀 Watchlist"
+    elif "🔥 HIGH" in opportunity:
+        # Fallback when caller didn't pass a priority — derive from the
+        # opportunity text so older call sites still get sensible styling.
+        color = discord.Color.gold()
+        title_prefix = "🚨 New"
     elif "WATCHLIST" in opportunity:
         color = discord.Color.orange()
+        title_prefix = "📈 New"
     else:
         color = discord.Color.blue()
+        title_prefix = "👀 New"
 
     embed = discord.Embed(
-        title=f"🚨 New Opportunity: {game['name']}",
+        title=f"{title_prefix}: {game['name']}",
         description=(
             f"{opportunity}\n"
             f"Source: {game.get('source', 'Unknown')}"
@@ -169,8 +194,14 @@ def create_tracker_embed(
     players_delta,
     visits_delta,
     tracked_since="",
+    priority=None,
 ):
-    """Build a '🚀 Watched Game Explosion' card for the tracker channel."""
+    """Build a '🚀 Watched Game Explosion' card for the tracker channel.
+
+    ``priority`` is one of "high"/"medium"/"low". Title and accent emoji
+    follow the alias exports from priority.py so the tracker's vocabulary
+    matches the bar in the user's `/settings` choices.
+    """
     players_pct = (
         f"+{players_delta:.1f}%" if players_delta >= 0 else f"{players_delta:.1f}%"
     )
@@ -178,7 +209,17 @@ def create_tracker_embed(
         f"+{visits_delta:.1f}%" if visits_delta >= 0 else f"{visits_delta:.1f}%"
     )
 
-    if players_delta >= 50 or visits_delta >= 20:
+    if priority == PRIORITY_HIGH:
+        color = discord.Color.gold()
+        severity = f"{priority_emoji(PRIORITY_HIGH)} {priority_label(PRIORITY_HIGH)}"
+    elif priority == PRIORITY_MEDIUM:
+        color = discord.Color.orange()
+        severity = f"{priority_emoji(PRIORITY_MEDIUM)} {priority_label(PRIORITY_MEDIUM)}"
+    elif priority == PRIORITY_LOW:
+        color = discord.Color.blue()
+        severity = f"{priority_emoji(PRIORITY_LOW)} {priority_label(PRIORITY_LOW)}"
+    elif players_delta >= 50 or visits_delta >= 20:
+        # Back-compat path for callers that don't pass priority.
         color = discord.Color.gold()
         severity = "🚀 MAJOR EXPLOSION"
     elif players_delta >= PLAYERS_THRESHOLD_TEXT or visits_delta >= VISITS_THRESHOLD_TEXT:
