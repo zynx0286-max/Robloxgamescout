@@ -47,3 +47,23 @@ Thumbs.db
 # Replit
 .cache/
 .local/
+.replit
+.replitignore
+
+# Database files — do not commit
+*.db
+*.db-journal
+*.db-wal
+
+# Environment / secrets
+.env
+.env.*
+
+# Python cache
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# Debug logs
+scan_debug.log
