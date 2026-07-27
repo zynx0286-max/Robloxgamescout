@@ -16,7 +16,9 @@ def _recreate_users_table(cursor):
     CREATE TABLE users (
         discord_id INTEGER PRIMARY KEY,
         minimum_visits INTEGER DEFAULT 100000,
+        maximum_visits INTEGER DEFAULT 0,
         minimum_players INTEGER DEFAULT 100,
+        maximum_players INTEGER DEFAULT 0,
         minimum_growth INTEGER DEFAULT 0,
         genre TEXT DEFAULT 'Any',
         max_age INTEGER DEFAULT 365
@@ -31,7 +33,9 @@ def create_database():
     expected_columns = {
         "discord_id",
         "minimum_visits",
+        "maximum_visits",
         "minimum_players",
+        "maximum_players",
         "minimum_growth",
         "genre",
         "max_age",
@@ -41,7 +45,9 @@ def create_database():
     CREATE TABLE IF NOT EXISTS users (
         discord_id INTEGER PRIMARY KEY,
         minimum_visits INTEGER DEFAULT 100000,
+        maximum_visits INTEGER DEFAULT 0,
         minimum_players INTEGER DEFAULT 100,
+        maximum_players INTEGER DEFAULT 0,
         minimum_growth INTEGER DEFAULT 0,
         genre TEXT DEFAULT 'Any',
         max_age INTEGER DEFAULT 365
@@ -51,6 +57,15 @@ def create_database():
     existing_columns = set(_table_columns(cursor, "users"))
     if not expected_columns.issubset(existing_columns):
         _recreate_users_table(cursor)
+        # Re-fetch columns after recreate — stale snapshot would cause
+        # duplicate-column errors on the in-place ALTER TABLE below.
+        existing_columns = set(_table_columns(cursor, "users"))
+
+    # In-place migrations for users tables predating the Smart Filters columns.
+    if "maximum_visits" not in existing_columns:
+        cursor.execute("ALTER TABLE users ADD COLUMN maximum_visits INTEGER DEFAULT 0")
+    if "maximum_players" not in existing_columns:
+        cursor.execute("ALTER TABLE users ADD COLUMN maximum_players INTEGER DEFAULT 0")
 
     cursor.execute("""
     CREATE TABLE IF NOT EXISTS game_history (
@@ -158,7 +173,9 @@ def get_user(discord_id):
 def update_user(
     discord_id,
     minimum_visits=None,
+    maximum_visits=None,
     minimum_players=None,
+    maximum_players=None,
     minimum_growth=None,
     genre=None,
     max_age=None,
@@ -173,9 +190,15 @@ def update_user(
     if minimum_visits is not None:
         fields.append("minimum_visits = ?")
         values.append(int(minimum_visits))
+    if maximum_visits is not None:
+        fields.append("maximum_visits = ?")
+        values.append(int(maximum_visits))
     if minimum_players is not None:
         fields.append("minimum_players = ?")
         values.append(int(minimum_players))
+    if maximum_players is not None:
+        fields.append("maximum_players = ?")
+        values.append(int(maximum_players))
     if minimum_growth is not None:
         fields.append("minimum_growth = ?")
         values.append(int(minimum_growth))
@@ -193,6 +216,63 @@ def update_user(
         conn.commit()
 
     conn.close()
+
+
+def get_user_filters(discord_id):
+    """Return a dict of filter settings for a user, with defaults if missing."""
+    add_user(discord_id)
+
+    conn = sqlite3.connect(DATABASE)
+    cursor = conn.cursor()
+
+    cursor.execute("""
+    SELECT minimum_visits, maximum_visits,
+           minimum_players, maximum_players,
+           minimum_growth, genre, max_age
+    FROM users
+    WHERE discord_id = ?
+    """, (discord_id,))
+
+    row = cursor.fetchone()
+    conn.close()
+
+    if row is None:
+        return {
+            "minimum_visits": 100000,
+            "maximum_visits": 0,
+            "minimum_players": 100,
+            "maximum_players": 0,
+            "minimum_growth": 0,
+            "genre": "Any",
+            "max_age": 365,
+        }
+
+    return {
+        "minimum_visits": int(row[0] or 0),
+        "maximum_visits": int(row[1] or 0),
+        "minimum_players": int(row[2] or 0),
+        "maximum_players": int(row[3] or 0),
+        "minimum_growth": int(row[4] or 0),
+        "genre": row[5] or "Any",
+        "max_age": int(row[6] or 0),
+    }
+
+
+def get_user_row(discord_id):
+    """Return the raw users row including all Smart Filter columns."""
+    conn = sqlite3.connect(DATABASE)
+    cursor = conn.cursor()
+
+    cursor.execute(
+        "SELECT discord_id, minimum_visits, maximum_visits, "
+        "minimum_players, maximum_players, minimum_growth, "
+        "genre, max_age FROM users WHERE discord_id = ?",
+        (discord_id,),
+    )
+
+    row = cursor.fetchone()
+    conn.close()
+    return row
 
 
 def save_game_snapshot(game):

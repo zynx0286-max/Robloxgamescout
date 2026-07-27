@@ -2,7 +2,8 @@ import discord
 from discord import app_commands
 from database import (
     add_user,
-    get_user,
+    get_user_filters,
+    get_user_row,
     update_user,
     get_saved_games_for_user,
     get_watched_games_for_user,
@@ -126,71 +127,110 @@ def setup_commands(tree: app_commands.CommandTree):
         user_id = interaction.user.id
 
         add_user(user_id)
-        data = get_user(user_id)
+        row = get_user_row(user_id)
+
+        if row is None:
+            await interaction.response.send_message(
+                "⚙️ No profile yet — set filters with **/settings**."
+            )
+            return
+
+        f = {
+            "min_visits": int(row[1] or 0),
+            "max_visits": int(row[2] or 0),
+            "min_players": int(row[3] or 0),
+            "max_players": int(row[4] or 0),
+            "min_growth": int(row[5] or 0),
+            "genre": row[6] or "Any",
+            "max_age": int(row[7] or 0),
+        }
+
+        def _v(x):
+            return "— (no cap)" if x == 0 else f"{x:,}"
 
         await interaction.response.send_message(
             f"""
 🎮 Scout Profile
 
 Minimum Visits:
-{int(data[1]):,}
+{f['min_visits']:,}
+
+Maximum Visits:
+{_v(f['max_visits'])}
 
 Minimum Players:
-{int(data[2]):,}
+{f['min_players']:,}
+
+Maximum Players:
+{_v(f['max_players'])}
 
 Minimum Growth:
-{int(data[3])}%
+{f['min_growth']}%
 
-Genre:
-{data[4]}
+Genre Filter:
+{f['genre']}
 
-Max Age:
-{int(data[5])} days
+Max Game Age:
+{f['max_age']} days
 """
         )
 
-    @tree.command(name="settings", description="Change your scout filters")
+    @tree.command(
+        name="settings",
+        description="Change your scout filters (any field can be omitted)",
+    )
     @app_commands.describe(
-        visits="Minimum number of visits a game must have",
-        players="Minimum number of active players",
-        growth="Minimum growth percentage (e.g. 50)",
-        genre="Genre to filter by (e.g. Simulator, RPG, Any)",
-        max_age="Maximum game age in days",
+        min_visits="Minimum number of visits a game must have",
+        max_visits="Maximum visits (0 = no cap)",
+        min_players="Minimum number of active players",
+        max_players="Maximum players (0 = no cap)",
+        min_growth="Minimum growth percentage (e.g. 30)",
+        genre="Genre keyword to filter by (Simulator, RPG, Tycoon, Any…)",
+        max_age="Maximum age in days (only enforced if timestamp is known)",
     )
     async def settings(
         interaction: discord.Interaction,
-        visits: int = None,
-        players: int = None,
-        growth: int = None,
+        min_visits: int = None,
+        max_visits: int = None,
+        min_players: int = None,
+        max_players: int = None,
+        min_growth: int = None,
         genre: str = None,
         max_age: int = None,
     ):
         user_id = interaction.user.id
 
         add_user(user_id)
-        update_user(user_id, visits, players, growth, genre, max_age)
+        update_user(
+            user_id,
+            minimum_visits=min_visits,
+            maximum_visits=max_visits,
+            minimum_players=min_players,
+            maximum_players=max_players,
+            minimum_growth=min_growth,
+            genre=genre,
+            max_age=max_age,
+        )
 
-        data = get_user(user_id)
+        f = get_user_filters(user_id)
+
+        def _v(x):
+            return "— (no cap)" if x == 0 else f"{x:,}"
 
         await interaction.response.send_message(
             f"""
 ⚙️ Scout Settings Updated
 
-Minimum Visits:
-{int(data[1]):,}
+Minimum Visits: {f['minimum_visits']:,}
+Maximum Visits: {_v(f['maximum_visits'])}
 
-Minimum Players:
-{int(data[2]):,}
+Minimum Players: {f['minimum_players']:,}
+Maximum Players: {_v(f['maximum_players'])}
 
-Minimum Growth:
-{int(data[3])}%
-
-Genre:
-{data[4]}
-
-Max Age:
-{int(data[5])} days
-"""
+Minimum Growth: {f['minimum_growth']}%
+Genre Filter: {f['genre']}
+Max Game Age: {f['max_age']} days
+""".strip()
         )
 
     @tree.command(name="game", description="Get Roblox game information")
@@ -240,22 +280,18 @@ Max Age:
     async def scan(interaction: discord.Interaction):
         user_id = interaction.user.id
         add_user(user_id)
-        data = get_user(user_id)
-
-        user_settings = {
-            "minimum_visits": int(data[1]) if data[1] is not None else 0,
-            "minimum_players": int(data[2]) if data[2] is not None else 0,
-            "minimum_growth": int(data[3]) if data[3] is not None else 0,
-        }
+        user_settings = get_user_filters(user_id)
 
         await interaction.response.send_message(
             f"""
 🔎 Scan Complete
 
 Filters:
-Players: {user_settings['minimum_players']:,}+
-Visits: {user_settings['minimum_visits']:,}+
+Players: {user_settings['minimum_players']:,}+ (max {user_settings['maximum_players']:,})
+Visits: {user_settings['minimum_visits']:,}+ (max {user_settings['maximum_visits']:,})
 Growth: {user_settings['minimum_growth']}%
+Genre: {user_settings['genre']}
+Max Age: {user_settings['max_age']} days
 
 Scanning...
 """

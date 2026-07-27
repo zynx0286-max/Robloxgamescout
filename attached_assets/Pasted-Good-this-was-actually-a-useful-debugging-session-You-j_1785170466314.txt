@@ -1,0 +1,237 @@
+Good, this was actually a useful debugging session. You just hit a very common Discord bot development issue: **multiple bot processes + command registration problems**.
+
+The important part is:
+
+✅ Zombie processes removed
+✅ Command sync issue identified
+✅ `commands.py` coroutine issue fixed
+✅ Bot should now restart cleanly
+
+Now do this:
+
+---
+
+## 1. Start the bot cleanly
+
+In Replit Shell:
+
+```bash
+cd /home/runner/workspace/Roblox-Game-Scout-Bot && python main.py
+```
+
+Wait until you see:
+
+```text
+Logged in as Roblox Game Scout#....
+Slash commands synced to test server: ...
+```
+
+Do **not** start another copy in another Shell tab.
+
+You should only ever have:
+
+```text
+1 bot process = online
+```
+
+Multiple processes can cause:
+
+* commands not updating
+* bot randomly going offline
+* duplicate alerts
+* button interactions failing
+
+---
+
+## 2. Test the management commands
+
+Run these in Discord:
+
+### Test watched
+
+```
+/watched
+```
+
+Expected:
+
+```text
+👀 Watched Games
+
+Blox Fruits
+
+Players:
+280,500
+
+Last Checked:
+July 27
+```
+
+---
+
+### Test unwatch
+
+```
+/unwatch 994732206
+```
+
+Expected:
+
+```text
+✅ Removed Blox Fruits from your tracked games.
+```
+
+---
+
+### Test saved
+
+```
+/saved
+```
+
+Expected:
+
+```text
+💾 Saved Games
+
+Blox Fruits
+```
+
+---
+
+### Test ignored
+
+```
+/ignored
+```
+
+Expected:
+
+```text
+🚫 Ignored Games
+
+No ignored games.
+```
+
+---
+
+## If everything works
+
+You have completed:
+
+# Management System ✅
+
+Your bot now has:
+
+```
+Games Found
+     |
+     ├── Save
+     │      ↓
+     │  saved_games
+     │
+     ├── Watch
+     │      ↓
+     │  watched_games
+     │      ↓
+     │  Tracker alerts
+     │
+     └── Ignore
+            ↓
+        ignored_games
+```
+
+That is a real product structure.
+
+---
+
+# Next milestone: Smart Filters
+
+This is where the bot becomes personalized.
+
+Currently:
+
+```
+Scanner
+   ↓
+Find games
+   ↓
+Alert
+```
+
+The problem:
+
+Everyone gets the same games.
+
+After Smart Filters:
+
+```
+Scanner
+   ↓
+User Settings
+   ↓
+Filter Engine
+   ↓
+Personalized Alerts
+```
+
+Example:
+
+User A:
+
+```
+Minimum Players:
+1000
+
+Maximum Visits:
+5M
+
+Growth:
+30%+
+```
+
+Gets:
+
+> New small game exploding
+
+---
+
+User B:
+
+```
+Minimum Players:
+50,000
+
+Genre:
+Simulator
+```
+
+Gets:
+
+> Already successful games worth watching
+
+---
+
+Next Replit task should be:
+
+```
+Build Smart Filters system.
+
+Requirements:
+
+- Create a user_filters database table.
+- Add filters:
+  minimum_players
+  maximum_players
+  minimum_visits
+  maximum_visits
+  minimum_growth
+  genre
+  game_age_days
+
+- Update /settings to allow users to edit these values.
+- Make scanner.py apply these filters before sending alerts.
+- Keep existing commands working.
+```
+
+Do that before Developer Intelligence. Your bot's biggest advantage will come from **finding the right games**, not just analyzing them.
