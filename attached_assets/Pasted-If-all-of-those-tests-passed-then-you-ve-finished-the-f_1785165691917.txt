@@ -1,0 +1,140 @@
+If all of those tests passed, then you've finished the **foundation phase**. That's a big milestone because you now have a working Discord bot that can interact with users.
+
+Now it's time to build the feature that makes your bot valuable.
+
+# Next Milestone: Automatic Scanning
+
+Right now your bot only works when someone runs:
+
+```text
+/scan
+```
+
+Instead, it should work like this:
+
+```text
+Bot starts
+      ↓
+Every 15 minutes
+      ↓
+Search Roblox
+      ↓
+Apply your filters
+      ↓
+Remove games already seen
+      ↓
+Score each game
+      ↓
+Post new opportunities to #alerts
+```
+
+This is the core of a Game Scout bot.
+
+---
+
+# Step 1: Create a scheduler
+
+Create a new file:
+
+```text
+scheduler.py
+```
+
+Its job is **only** to run scans on a schedule. Don't put scanning logic in it—keep that in `scanner.py`.
+
+---
+
+# Step 2: Connect the scheduler to the scanner
+
+Your flow should become:
+
+```text
+scheduler.py
+        ↓
+scanner.py
+        ↓
+roblox_api.py
+        ↓
+embeds.py
+        ↓
+Discord
+```
+
+Each file should have one clear responsibility.
+
+---
+
+# Step 3: Prevent duplicate alerts
+
+Add a way to remember games you've already alerted on.
+
+When the scanner finds a game:
+
+1. Check if its Universe ID is already in your database.
+2. If it is, skip it.
+3. If it isn't, save it and send the alert.
+
+That prevents the bot from posting the same game every 15 minutes.
+
+---
+
+# Step 4: Create a dedicated alerts channel
+
+In your Discord server, create a channel like:
+
+```text
+#alerts
+```
+
+Eventually, every automatic opportunity should be posted there.
+
+---
+
+# Step 5: Design the alert embed
+
+Instead of a basic message, aim for something like:
+
+```text
+🚨 New Opportunity Found
+
+🎮 Game: Example Simulator
+👥 Players: 2,350
+📈 Growth: +185%
+👤 Creator: Example Studios
+⭐ Score: 87/100
+
+Reason:
+• Rapid player growth
+• Low total visits
+• Strong recent momentum
+
+Buttons:
+[💾 Save] [👀 Watch] [❌ Ignore]
+```
+
+The important part is the **reason**. Eventually, your scoring system (and later Gemini) should explain *why* the game is interesting.
+
+---
+
+# Step 6: Start simple
+
+Don't worry about AI yet. For your first automatic version, even a rule like this is enough:
+
+* At least 100 concurrent players.
+* Growth above 20%.
+* Fewer than 10 million visits.
+* Not already in the database.
+
+If a game meets those conditions, post it.
+
+---
+
+## What I recommend doing next
+
+Before writing any code, ask Replit to implement **only** the scheduler. Keep the request focused. For example:
+
+> Create `scheduler.py` using `discord.ext.tasks`. It should start automatically when the bot is ready, run every 15 minutes, call the existing scan function in `scanner.py`, and log the start, completion, and any errors. Do not change any other functionality.
+
+This keeps the change small and makes it easier to debug if something goes wrong.
+
+Once the scheduler is running reliably, we'll connect it to `#alerts`, then add filters, scoring, and eventually the AI analysis. That sequence will give you a stable bot instead of trying to build everything at once.

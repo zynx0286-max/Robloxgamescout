@@ -73,6 +73,23 @@ def create_database():
     )
     """)
 
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS alerted_games (
+        game_id INTEGER PRIMARY KEY,
+        game_name TEXT,
+        first_alerted TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )
+    """)
+
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS scan_log (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        event TEXT NOT NULL,
+        message TEXT,
+        timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+    """)
+
     conn.commit()
     conn.close()
 
@@ -203,3 +220,46 @@ def get_saved_games_for_user(user_id):
     conn.close()
 
     return rows
+
+
+def is_alerted(game_id):
+    """Return True if this Universe ID has already been alerted on."""
+    conn = sqlite3.connect(DATABASE)
+    cursor = conn.cursor()
+
+    cursor.execute(
+        "SELECT 1 FROM alerted_games WHERE game_id = ?",
+        (game_id,),
+    )
+    exists = cursor.fetchone() is not None
+
+    conn.close()
+    return exists
+
+
+def mark_alerted(game_id, game_name):
+    """Record that this Universe ID has been alerted on."""
+    conn = sqlite3.connect(DATABASE)
+    cursor = conn.cursor()
+
+    cursor.execute("""
+    INSERT OR IGNORE INTO alerted_games (game_id, game_name)
+    VALUES (?, ?)
+    """, (game_id, game_name))
+
+    conn.commit()
+    conn.close()
+
+
+def save_alert_log(event, message):
+    """Append a single row to the scan_log table."""
+    conn = sqlite3.connect(DATABASE)
+    cursor = conn.cursor()
+
+    cursor.execute("""
+    INSERT INTO scan_log (event, message)
+    VALUES (?, ?)
+    """, (event, message))
+
+    conn.commit()
+    conn.close()

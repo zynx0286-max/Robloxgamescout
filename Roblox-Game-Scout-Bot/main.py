@@ -4,6 +4,7 @@ import os
 from dotenv import load_dotenv
 from database import create_database
 from commands import setup_commands
+from scheduler import start_scheduler, stop_scheduler
 
 load_dotenv()
 
@@ -42,5 +43,10 @@ bot = MyBot()
 @bot.event
 async def on_ready():
     print(f"Logged in as {bot.user}")
+    start_scheduler(bot)
+
+async def _shutdown():
+    stop_scheduler()
+    await bot.close()
 
 bot.run(TOKEN)
