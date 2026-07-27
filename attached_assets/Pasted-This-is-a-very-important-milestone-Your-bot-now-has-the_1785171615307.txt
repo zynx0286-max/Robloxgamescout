@@ -1,0 +1,223 @@
+This is a very important milestone. Your bot now has the decision layer:
+
+Before:
+
+Find game → Alert
+
+Now:
+
+Find game
+    ↓
+Filter it
+    ↓
+Score it
+    ↓
+Explain why it matters
+    ↓
+Alert
+
+That is much closer to an actual scouting product.
+
+I would move to Developer Intelligence next, but with one adjustment:
+
+Do not try to make the developer score perfect immediately. Build the data pipeline first.
+
+Right now:
+
+👨‍💻 Developer history +0
+
+is the weakest part of the score.
+
+We need to collect:
+
+Developer Intelligence v1
+
+Create a new file:
+
+developer_intelligence.py
+
+Its job:
+
+Input:
+
+creator_id
+
+Output:
+
+{
+    "games_created": 15,
+    "successful_games": 3,
+    "total_group_members": 25000,
+    "avg_update_frequency": 14,
+    "developer_score": 15
+}
+Data we should collect
+1. Creator/Game History
+
+Questions:
+
+How many games has this developer made?
+Are they experienced?
+Do they have previous successful games?
+
+Example:
+
+Bad:
+
+Creator:
+NewUser123
+
+Games:
+1
+Average CCU:
+20
+
+Good:
+
+Creator:
+Example Studios
+
+Games:
+12
+
+Previous hits:
+3
+
+Largest game:
+50K CCU
+2. Update Frequency
+
+A game that gets updated often has a higher chance of surviving.
+
+Track:
+
+Last update:
+5 days ago
+
+Average updates:
+Every 12 days
+
+Score:
+
+Active developer:
++10
+
+Inactive:
++0
+3. Group Information
+
+Many successful Roblox games come from groups.
+
+Collect:
+
+Group members:
+120,000
+
+Group age:
+3 years
+
+Signals:
+
+Large established group:
++5
+
+New empty group:
++0
+
+4. Previous Game Success
+
+Example:
+
+Creator has:
+
+Game A:
+200K CCU peak
+
+Game B:
+50K CCU peak
+
+Game C:
+1K CCU
+
+That developer is much more valuable than someone with only one random game.
+
+Update your Scout Score
+
+Currently:
+
+Growth              30
+Player Momentum     25
+New Release         15
+Like Ratio          10
+Developer History   20
+
+Keep this.
+
+After Developer Intelligence:
+
+Example:
+
+⭐ Scout Score: 89/100
+
+📈 Growth:
++28
+
+👥 Momentum:
++24
+
+🆕 New Release:
++15
+
+❤️ Like Ratio:
++9
+
+👨‍💻 Developer:
++13
+Replit prompt
+
+I would give Replit this:
+
+Build Developer Intelligence v1.
+
+Requirements:
+
+- Create developer_intelligence.py
+- Given a Roblox creator ID, collect:
+  - creator username
+  - number of games
+  - group information if available
+  - previous game statistics
+  - last update dates
+
+- Create calculate_developer_score()
+- Return a score from 0-20.
+- Connect it to calculate_scout_score().
+- Replace the current developer history stub.
+- If data is unavailable, safely return 0.
+- Do not break existing scanning, alerts, or embeds.
+
+After this, your architecture becomes:
+
+RoTrends
+   ↓
+Scanner
+   ↓
+Smart Filters
+   ↓
+Scout Score
+   ↓
+Developer Intelligence
+   ↓
+Gemini AI Analyst
+   ↓
+Discord Alert
+
+Then the Gemini part becomes much more powerful because instead of asking:
+
+"Analyze this random Roblox game"
+
+you can ask:
+
+"Analyze this opportunity using CCU, growth, retention, developer history, and market signals."
+
+That is the point where this starts feeling like an actual Roblox acquisition/scouting tool.

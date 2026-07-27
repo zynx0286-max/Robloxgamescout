@@ -5,6 +5,7 @@ from database import save_game_snapshot
 from growth import get_growth
 from trend import calculate_trend_score
 from filters import passes_filters
+from developer_intelligence import calculate_developer_score
 
 
 DEBUG_LOG = "scan_debug.log"
@@ -76,11 +77,9 @@ def _new_release_points(game):
 
 
 def _developer_history_points(game):
-    """Developer history is not yet tracked; stub returns 0 unless we have a creator."""
-    creator = game.get("creator")
-    if not creator:
-        return 0, "👨\u200d💻 Developer history", "Unknown creator"
-    return 0, "👨\u200d💻 Developer history", f"By {creator} (history not yet tracked)"
+    """Pull creator history from Roblox via developer_intelligence and score it."""
+    pts, label, reason = calculate_developer_score(game)
+    return pts, label, reason
 
 
 def calculate_scout_score(game):
