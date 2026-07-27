@@ -243,15 +243,17 @@ Max Game Age: {f['max_age']} days
     @tree.command(name="game", description="Get Roblox game information")
     @app_commands.describe(place_id="Roblox game Universe ID")
     async def game(interaction: discord.Interaction, place_id: str):
+        await interaction.response.defer(thinking=True)
+
         data = get_game_info(place_id)
 
         if data is None:
-            await interaction.response.send_message(
+            await interaction.followup.send(
                 "Could not find that Roblox game."
             )
             return
 
-        await interaction.response.send_message(
+        await interaction.followup.send(
             f"""
 🎮 {data['name']}
 
@@ -323,11 +325,13 @@ Max Game Age: {f['max_age']} days
         description="Show today's Gemini quota usage"
     )
     async def aiusage(interaction: discord.Interaction):
+        await interaction.response.defer(thinking=True)
+
         limit = get_daily_limit()
         used = get_usage_today()
         remaining = quota_remaining()
 
-        await interaction.response.send_message(
+        await interaction.followup.send(
             f"🤖 **Gemini AI quota**\n\n"
             f"**Daily limit:** {limit}\n"
             f"**Used today:** {used}\n"
@@ -407,11 +411,13 @@ Scanning...
 
     async def _show_saved_list(interaction: discord.Interaction):
         """Shared implementation for /saved and /watchlist."""
+        await interaction.response.defer(thinking=True)
+
         user_id = interaction.user.id
         saved = get_saved_games_for_user(user_id)
 
         if not saved:
-            await interaction.response.send_message(
+            await interaction.followup.send(
                 "📚 Your saved list is empty. Use **💾 Save** on a scan result to bookmark a game."
             )
             return
@@ -429,7 +435,7 @@ Scanning...
                 inline=False,
             )
 
-        await interaction.response.send_message(embed=embed)
+        await interaction.followup.send(embed=embed)
 
     @tree.command(name="saved", description="View your saved (bookmarked) games")
     async def saved(interaction: discord.Interaction):
@@ -441,11 +447,13 @@ Scanning...
 
     @tree.command(name="watched", description="View your actively tracked games")
     async def watched(interaction: discord.Interaction):
+        await interaction.response.defer(thinking=True)
+
         user_id = interaction.user.id
         tracked = get_watched_games_for_user(user_id)
 
         if not tracked:
-            await interaction.response.send_message(
+            await interaction.followup.send(
                 "👀 You're not tracking any games yet. Use the **👀 Watch** button on a scan result to monitor a game's growth."
             )
             return
@@ -468,15 +476,17 @@ Scanning...
             )
 
         embed.set_footer(text="Remove with /unwatch <game_id>")
-        await interaction.response.send_message(embed=embed)
+        await interaction.followup.send(embed=embed)
 
     @tree.command(name="ignored", description="View games you've ignored")
     async def ignored(interaction: discord.Interaction):
+        await interaction.response.defer(thinking=True)
+
         user_id = interaction.user.id
         blocked = get_ignored_games_for_user(user_id)
 
         if not blocked:
-            await interaction.response.send_message(
+            await interaction.followup.send(
                 "🚫 You haven't ignored any games yet."
             )
             return
@@ -495,7 +505,7 @@ Scanning...
             )
 
         embed.set_footer(text="Unblock with /unignore <game_id>")
-        await interaction.response.send_message(embed=embed)
+        await interaction.followup.send(embed=embed)
 
     @tree.command(
         name="unwatch",

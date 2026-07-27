@@ -1,2 +1,3 @@
 - [Discord.py stacked command decorators](discord-py-stacked-decorators.md) — stacking two `@tree.command(...)` decorators on one async function fails with `command function must be a coroutine function`.
+- [Discord duplicate bot processes](discord-duplicate-bot-processes.md) — two `python main.py` PIDs sharing one token race the interaction ACK; loser surfaces as "application did not respond".
 - [SQLite in-place migrations](sqlite-alter-table-migrations.md) — when a migration function both recreates a table and tries `ALTER TABLE ADD COLUMN`, re-fetch `PRAGMA table_info` after the recreate.
