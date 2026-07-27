@@ -1,0 +1,282 @@
+"""Gemini AI Analyst v1 — explain *why* a game opportunity matters.
+
+The analyst is intentionally read-on-demand, not a scan-time hook. Every
+call is cached in `ai_analysis_cache` for 24h so a burst of alerts or button
+presses can reuse the same answer. If `GEMINI_API_KEY` is unset (or Gemini
+itself fails), it returns a deterministic fallback so `/testai` still works.
+"""
+
+import json
+import os
+import sqlite3
+import time
+import requests
+
+
+DATABASE = "scoutbot.db"
+CACHE_TTL_SECONDS = 86400  # 24h
+GEMINI_API_KEY_ENV = "GEMINI_API_KEY"
+GEMINI_MODEL = "gemini-1.5-flash"
+
+
+VERDICT_WORTH = "🟢 Worth Monitoring"
+VERDICT_WAIT = "🟡 Wait for More Data"
+VERDICT_RISKY = "🟠 Risky"
+VERDICT_AVOID = "🔴 Avoid"
+VERDICT_FALLBACK = "🟡 Data Only"
+
+VALID_VERDICTS = {VERDICT_WORTH, VERDICT_WAIT, VERDICT_RISKY, VERDICT_AVOID, VERDICT_FALLBACK}
+
+
+def _ensure_table():
+    """Create ai_analysis_cache if missing."""
+    conn = sqlite3.connect(DATABASE)
+    cursor = conn.cursor()
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS ai_analysis_cache (
+        game_id INTEGER PRIMARY KEY,
+        verdict TEXT,
+        confidence INTEGER,
+        strengths TEXT,
+        risks TEXT,
+        recommendation TEXT,
+        raw TEXT,
+        last_checked TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )
+    """)
+    conn.commit()
+    conn.close()
+
+
+def _cache_get(game_id):
+    _ensure_table()
+    conn = sqlite3.connect(DATABASE)
+    cursor = conn.cursor()
+    cursor.execute("""
+    SELECT verdict, confidence, strengths, risks, recommendation,
+           raw, strftime('%s', last_checked)
+    FROM ai_analysis_cache
+    WHERE game_id = ?
+    """, (int(game_id),))
+    row = cursor.fetchone()
+    conn.close()
+    return row
+
+
+def _cache_put(game_id, payload):
+    _ensure_table()
+    conn = sqlite3.connect(DATABASE)
+    cursor = conn.cursor()
+    cursor.execute("""
+    INSERT INTO ai_analysis_cache
+    (game_id, verdict, confidence, strengths, risks, recommendation, raw)
+    VALUES (?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT(game_id) DO UPDATE SET
+        verdict=excluded.verdict,
+        confidence=excluded.confidence,
+        strengths=excluded.strengths,
+        risks=excluded.risks,
+        recommendation=excluded.recommendation,
+        raw=excluded.raw,
+        last_checked=CURRENT_TIMESTAMP
+    """, (
+        int(game_id),
+        payload.get("verdict"),
+        payload.get("confidence"),
+        json.dumps(payload.get("strengths") or []),
+        json.dumps(payload.get("risks") or []),
+        payload.get("recommendation"),
+        payload.get("raw") or "",
+    ))
+    conn.commit()
+    conn.close()
+
+
+def build_prompt_input(game_data):
+    """Build a structured payload dict to send to Gemini."""
+    scout = game_data.get("scout_score") or {}
+    breakdown = scout.get("breakdown") or []
+    by_label = {label: pts for label, pts, _ in breakdown}
+
+    return {
+        "game_name": game_data.get("name", "Unknown"),
+        "universe_id": game_data.get("id"),
+        "playing": game_data.get("playing", 0),
+        "visits": game_data.get("visits", 0),
+        "favorites": game_data.get("favorites", 0),
+        "growth_pct": game_data.get("growth", 0),
+        "creator": game_data.get("creator", "Unknown"),
+        "source": game_data.get("source", "Unknown"),
+        "scout_score": scout.get("total", 0),
+        "scout_verdict": scout.get("verdict", ""),
+        "score_breakdown": {
+            "growth": by_label.get("📈 Growth", 0),
+            "momentum": by_label.get("👥 Player momentum", 0),
+            "release": by_label.get("🆕 New release", 0),
+            "likes": by_label.get("❤️ Like ratio", 0),
+            "developer": by_label.get("👨\u200d💻 Developer history", 0),
+        },
+        "trend_score": game_data.get("trend_score", 0),
+    }
+
+
+PROMPT_TEMPLATE = (
+    "You are a Roblox scouting analyst. Use the structured data below to "
+    "assess whether this Roblox game is worth monitoring for acquisition/"
+    "investment.\n\n"
+    "Game data:\n{game_data}\n\n"
+    "Return ONLY valid JSON matching this exact schema:\n"
+    "{{\n"
+    '  "verdict": "' + VERDICT_WORTH + ' | ' + VERDICT_WAIT + ' | '
+    + VERDICT_RISKY + ' | ' + VERDICT_AVOID + '",\n'
+    '  "confidence": <integer 0-100>,\n'
+    '  "strengths": [ "<short bullet>", "<short bullet>" ],\n'
+    '  "risks": [ "<short bullet>", "<short bullet>" ],\n'
+    '  "recommendation": "<one or two sentence actionable advice>"\n'
+    "}}\n\n"
+    "No prose. No markdown. Only JSON."
+)
+
+
+def _call_gemini(prompt):
+    """Hit Gemini's generateContent endpoint. Returns dict or None on failure."""
+    api_key = os.environ.get(GEMINI_API_KEY_ENV)
+    if not api_key:
+        return None
+    url = (
+        f"https://generativelanguage.googleapis.com/v1beta/models/"
+        f"{GEMINI_MODEL}:generateContent?key={api_key}"
+    )
+    payload = {
+        "contents": [{"parts": [{"text": prompt}]}],
+        "generationConfig": {"responseMimeType": "application/json"},
+    }
+    try:
+        r = requests.post(url, json=payload, timeout=30)
+        if r.status_code == 200:
+            data = r.json()
+            text = (
+                data.get("candidates", [{}])[0]
+                .get("content", {})
+                .get("parts", [{}])[0]
+                .get("text", "")
+            )
+            return json.loads(text)
+    except Exception:
+        pass
+    return None
+
+
+def _fallback(game_data):
+    """Deterministic explanation when Gemini is unavailable."""
+    score = (game_data.get("scout_score") or {}).get("total", 0)
+    return {
+        "verdict": VERDICT_FALLBACK,
+        "confidence": 0,
+        "strengths": [
+            f"Scout Score = {score}/100 (Gemini key not configured).",
+        ],
+        "risks": [
+            "AI analysis not enabled. Set GEMINI_API_KEY in environment to enable.",
+        ],
+        "recommendation": (
+            "Add GEMINI_API_KEY to Replit Secrets, restart the bot, "
+            "and rerun /testai for AI-powered context."
+        ),
+        "raw": "",
+    }
+
+
+def _normalize(result):
+    """Force the result into our schema; replace bad values with safe defaults."""
+    norm = {
+        "verdict": result.get("verdict"),
+        "confidence": result.get("confidence"),
+        "strengths": result.get("strengths"),
+        "risks": result.get("risks"),
+        "recommendation": result.get("recommendation"),
+        "raw": "",
+    }
+
+    if norm["verdict"] not in VALID_VERDICTS:
+        norm["verdict"] = VERDICT_FALLBACK
+    try:
+        norm["confidence"] = max(0, min(100, int(norm["confidence"])))
+    except Exception:
+        norm["confidence"] = 0
+
+    if not isinstance(norm["strengths"], list):
+        norm["strengths"] = [str(norm["strengths"])] if norm["strengths"] else []
+    if not isinstance(norm["risks"], list):
+        norm["risks"] = [str(norm["risks"])] if norm["risks"] else []
+    if not isinstance(norm["recommendation"], str):
+        norm["recommendation"] = str(norm["recommendation"] or "")
+
+    return norm
+
+
+def analyze_game(game_data, force_refresh=False):
+    """Return a structured analysis for a game.
+
+    Cached per-universe-id for 24h. Falls back gracefully when Gemini is
+    unreachable. Always returns a dict with `verdict`, `confidence`,
+    `strengths`, `risks`, `recommendation`.
+    """
+    game_id = game_data.get("id")
+    if not game_id:
+        return _normalize({
+            "verdict": VERDICT_FALLBACK,
+            "confidence": 0,
+            "strengths": [],
+            "risks": ["Missing universe id"],
+            "recommendation": "Cannot analyze — id missing.",
+        })
+
+    if not force_refresh:
+        cached = _cache_get(game_id)
+        if cached:
+            last_ts = int(cached[6] or 0)
+            if (time.time() - last_ts) < CACHE_TTL_SECONDS:
+                return _normalize({
+                    "verdict": cached[0],
+                    "confidence": int(cached[1] or 0),
+                    "strengths": json.loads(cached[2] or "[]"),
+                    "risks": json.loads(cached[3] or "[]"),
+                    "recommendation": cached[4] or "",
+                    "raw": cached[5] or "",
+                })
+
+    payload = build_prompt_input(game_data)
+    prompt = PROMPT_TEMPLATE.format(game_data=json.dumps(payload, indent=2))
+    raw_result = _call_gemini(prompt)
+
+    if raw_result is None:
+        normalized = _normalize(_fallback(game_data))
+    else:
+        normalized = _normalize(raw_result)
+        normalized["raw"] = json.dumps(raw_result)
+
+    _cache_put(game_id, normalized)
+    return normalized
+
+
+def format_report(name, analysis):
+    """Render a Discord-friendly markdown report from a structured analysis."""
+    verdict = analysis.get("verdict", "Unknown")
+    confidence = analysis.get("confidence", 0)
+    strengths = analysis.get("strengths") or []
+    risks = analysis.get("risks") or []
+    recommendation = analysis.get("recommendation") or "—"
+
+    strengths_text = "\n".join(f"✅ {s}" for s in strengths) or "—"
+    risks_text = "\n".join(f"⚠️ {r}" for r in risks) or "—"
+
+    return (
+        f"🤖 **AI Analyst Report**\n\n"
+        f"**Game:** {name}\n\n"
+        f"**Verdict:** {verdict}\n\n"
+        f"**Confidence:** {confidence}%\n\n"
+        f"**Why this matters:**\n{strengths_text}\n\n"
+        f"**Risks:**\n{risks_text}\n\n"
+        f"**Recommendation:** {recommendation}"
+    )

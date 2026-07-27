@@ -17,6 +17,7 @@ from scanner import calculate_score, scan_games
 from categories import get_category
 from embeds import create_game_embed
 from buttons import GameButtons, AlertButtons
+from gemini_analyzer import analyze_game, format_report
 
 
 def _reasons(game):
@@ -275,6 +276,41 @@ Max Game Age: {f['max_age']} days
         await interaction.response.send_message(
             f"Game Scout Score: {score}/100"
         )
+
+    @tree.command(
+        name="testai",
+        description="Run Gemini AI analyst on sample game data (read-only)"
+    )
+    async def testai(interaction: discord.Interaction):
+        sample_game = {
+            "id": 994732206,
+            "place_id": 2753915549,
+            "name": "Blox Fruits (Test AI)",
+            "playing": 280000,
+            "visits": 62900000000,
+            "favorites": 19000000,
+            "growth": 12.5,
+            "creator": "Gamer Robot Inc",
+            "source": "Test",
+            "created": "2024-09-15T00:00:00Z",
+            "scout_score": {
+                "total": 67,
+                "verdict": "🔥 Strong opportunity",
+                "breakdown": [
+                    ("📈 Growth", 25, "🚀 Strong growth"),
+                    ("👥 Player momentum", 25, "🏟 Stadium-scale"),
+                    ("🆕 New release", 0, "⏳ Mature game"),
+                    ("❤️ Like ratio", 7, "❤️ High favor rate"),
+                    ("👨\u200d💻 Developer history", 10, "Verified creator"),
+                ],
+            },
+            "trend_score": 25,
+        }
+
+        await interaction.response.defer(thinking=True)
+        analysis = analyze_game(sample_game, force_refresh=True)
+        report = format_report(sample_game["name"], analysis)
+        await interaction.followup.send(report)
 
     @tree.command(name="scan", description="Find trending Roblox games")
     async def scan(interaction: discord.Interaction):

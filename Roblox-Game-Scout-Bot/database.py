@@ -138,6 +138,19 @@ def create_database():
     )
     """)
 
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS ai_analysis_cache (
+        game_id INTEGER PRIMARY KEY,
+        verdict TEXT,
+        confidence INTEGER,
+        strengths TEXT,
+        risks TEXT,
+        recommendation TEXT,
+        raw TEXT,
+        last_checked TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )
+    """)
+
     conn.commit()
     conn.close()
 
