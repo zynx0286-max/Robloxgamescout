@@ -5,24 +5,30 @@ Two response modes:
 1. ``@Roblox Game Scout <universe_id>`` (or ``... analyze <id>``) — runs the
    ``analyze_game()`` pipeline and posts the same ``format_report()`` output
    as the ``/analyze`` slash command. Cache + quota gate + Scout Score +
-   Gemini verdict all unchanged.
+   Gemini verdict are unchanged. **No conversation history** is loaded —
+   the analyze path returns a structured report.
 
-2. ``@Roblox Game Scout <question>`` — freeform Gemini question. Useful for
-   asking about recent scans, watcher alerts, or general Roblox scouting.
+2. ``@Roblox Game Scout <question>`` — conversational mode. The bot
+   remembers the last few turns in this channel, sends them as context
+   alongside the latest question, and reuses the existing
+   ``answer_question()`` cache so identical questions get identical cached
+   answers (the cache key is the latest message — context isn't part of
+   the key, by design, so context doesn't poison the cache).
 
 Behavior:
   * Only responds inside the configured channel (``AI_CHANNEL_ID`` per the
-    spec, with ``AI_SCOUT_ID`` accepted as a legacy alias).
+    spec; ``AI_SCOUT_ID`` is accepted as a legacy alias).
   * Only responds when the bot is mentioned.
-  * Bot-authored messages are always skipped.
-  * Slash-command work, scheduler, tracker, filters, and buttons are not
-    touched.
+  * Bot-authored and command-pipeline messages are skipped.
+  * Slash-command work, scheduler, tracker, filters, and buttons are
+    untouched.
 """
 
 import asyncio
 import logging
 import os
 import re
+import sqlite3
 
 from roblox_api import get_game_info
 from growth import get_growth
@@ -32,8 +38,12 @@ from gemini_analyzer import analyze_game, answer_question, format_report
 
 logger = logging.getLogger("ai_scout_channel")
 
+DATABASE = "scoutbot.db"
 AI_CHANNEL_ID_ENV = "AI_CHANNEL_ID"
 AI_SCOUT_ID_ENV = "AI_SCOUT_ID"  # legacy alias from initial secret add.
+HISTORY_CAP = 12  # store last 12 turns (6 user + 6 assistant)
+HISTORY_INCLUDE_LAST = 8  # include last 8 turns in prompt to keep it tight
+
 _DIGIT_RE = re.compile(r"\b\d{5,}\b")
 _MENTION_RE = re.compile(r"<@!?\d+>")
 
@@ -51,13 +61,80 @@ def resolve_ai_channel_id():
     return 0
 
 
+def _ensure_history_table():
+    """Create the conversation history table + index if missing."""
+    conn = sqlite3.connect(DATABASE)
+    cursor = conn.cursor()
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS ai_chat_history (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        channel_id INTEGER NOT NULL,
+        role TEXT NOT NULL,
+        content TEXT NOT NULL,
+        last_checked TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )
+    """)
+    cursor.execute("""
+    CREATE INDEX IF NOT EXISTS idx_ai_chat_history_recent
+    ON ai_chat_history (channel_id, id)
+    """)
+    conn.commit()
+    conn.close()
+
+
+def _history_append(channel_id, role, content):
+    """Append a turn to the channel's history. Truncate content defensively."""
+    _ensure_history_table()
+    conn = sqlite3.connect(DATABASE)
+    cursor = conn.cursor()
+    cursor.execute(
+        """
+        INSERT INTO ai_chat_history (channel_id, role, content)
+        VALUES (?, ?, ?)
+        """,
+        (int(channel_id), role, (content or "")[:4000]),
+    )
+    conn.commit()
+    conn.close()
+
+
+def _history_recent(channel_id, limit):
+    """Return up to `limit` most-recent (role, content) tuples, oldest first."""
+    _ensure_history_table()
+    conn = sqlite3.connect(DATABASE)
+    cursor = conn.cursor()
+    cursor.execute("""
+    SELECT role, content FROM ai_chat_history
+    WHERE channel_id = ?
+    ORDER BY id DESC LIMIT ?
+    """, (int(channel_id), int(limit)))
+    rows = cursor.fetchall()
+    conn.close()
+    return list(reversed(rows))
+
+
+def _history_prune(channel_id, keep):
+    """Trim stored history so only ``keep`` most-recent turns remain."""
+    _ensure_history_table()
+    conn = sqlite3.connect(DATABASE)
+    cursor = conn.cursor()
+    cursor.execute("""
+    DELETE FROM ai_chat_history
+    WHERE channel_id = ? AND id NOT IN (
+        SELECT id FROM ai_chat_history
+        WHERE channel_id = ?
+        ORDER BY id DESC LIMIT ?
+    )
+    """, (int(channel_id), int(channel_id), int(keep)))
+    conn.commit()
+    conn.close()
+
+
 def _strip_mentions(text):
-    """Strip Discord user mentions so the bot only sees the user's question."""
     return _MENTION_RE.sub("", text or "").strip()
 
 
 def _is_bot_mentioned(message, bot_user_id):
-    """True if a Discord user mention token references this bot."""
     if not bot_user_id:
         return False
     for m in _MENTION_RE.finditer(message.content or ""):
@@ -91,17 +168,39 @@ async def _handle_analyze_path(universe_id):
     return format_report(info["name"], analysis)
 
 
-async def _handle_freeform_path(question):
-    """Send a freeform question to Gemini. Returns markdown text or hint."""
+async def _handle_freeform_path(question, channel_id):
+    """Conversational assistant — record user + assistant turns, send
+    recent history to Gemini alongside the latest message.
+
+    Cache key is the latest message text. Conversation context is part of
+    the *prompt* but not the cache key, so identical first-time questions
+    resolve to identical answers regardless of history depth.
+    """
+    history = _history_recent(channel_id, HISTORY_INCLUDE_LAST)
+
+    _history_append(channel_id, "user", question)
+    _history_prune(channel_id, HISTORY_CAP)
+
     if not question.strip():
-        return (
+        answer = (
             "👋 Mention me with a game ID to analyze, or ask a Roblox "
             "scouting question.\n"
             "Examples:\n"
             "• `@Roblox Game Scout 994732206`\n"
             "• `@Roblox Game Scout what type of games are trending right now?`"
         )
-    return await asyncio.to_thread(answer_question, question)
+    else:
+        try:
+            answer = await asyncio.to_thread(
+                answer_question, question, False, history
+            )
+        except Exception as exc:
+            logger.exception("answer_question failed for %s", question)
+            answer = f"⚠️ Assistant error: `{exc}`"
+
+    _history_append(channel_id, "assistant", answer)
+    _history_prune(channel_id, HISTORY_CAP)
+    return answer
 
 
 async def handle_ai_scout_message(message, bot_user_id):
@@ -109,7 +208,7 @@ async def handle_ai_scout_message(message, bot_user_id):
 
     Returns the response text the bot should reply with, or None for
     silence. The channel + mention filters early-exit on regular channels
-    so this is safe to bind to ``on_message`` globally.
+    so binding this to ``on_message`` globally is safe.
     """
     if message.author.bot:
         return None
@@ -129,4 +228,4 @@ async def handle_ai_scout_message(message, bot_user_id):
         except ValueError:
             pass
 
-    return await _handle_freeform_path(cleaned)
+    return await _handle_freeform_path(cleaned, message.channel.id)

@@ -360,6 +360,22 @@ QUESTION_PROMPT_TEMPLATE = (
     "Respond in markdown. Prefer bullet lists for clarity."
 )
 
+QUESTION_PROMPT_TEMPLATE_CONVERSATIONAL = (
+    "You are a Roblox scouting assistant talking to a user in a Discord "
+    "#ai-scout channel. Use the recent conversation history for context — "
+    "if the user says \"that game\" or \"the one with 50k players\", you "
+    "should recall the universe id or name from the history.\n\n"
+    "Recent conversation (oldest first):\n"
+    "{history}\n\n"
+    "Latest user message:\n"
+    "{question}\n\n"
+    "If the latest message includes a Roblox Universe ID, you may describe "
+    "the game briefly but defer to the structured analyze_game report that "
+    "the bot will generate separately.\n\n"
+    "Respond in markdown. Prefer short paragraphs, then bullet lists. "
+    "Do not restate the question. Answer directly."
+)
+
 
 def _ensure_question_table():
     """Create ai_question_cache if missing."""
@@ -409,8 +425,12 @@ def _question_cache_valid(row, now_epoch):
     return bool(row) and (now_epoch - int(row[1] or 0)) < QUESTION_CACHE_TTL_SECONDS
 
 
-def answer_question(question, force_refresh=False):
+def answer_question(question, force_refresh=False, history=None):
     """Send a freeform question to Gemini. Cached by question hash 24h.
+
+    The cache key is the lowercase latest user message; history is part of
+    the prompt but never part of the cache key, so identical user questions
+    yield identical cached answers regardless of conversation depth.
 
     Returns the markdown answer as a string. Quota, key presence, and
     runtime errors are surfaced as friendly Discord messages without
@@ -424,7 +444,7 @@ def answer_question(question, force_refresh=False):
 
     if not force_refresh:
         cached = _question_cache_get(key)
-        if cached and _question_cache_valid(cached, int(__import__("time").time())):
+        if cached and _question_cache_valid(cached, time.time()):
             return cached[0] or "(cached answer was empty)"
 
     if quota_remaining() <= 0:
@@ -440,7 +460,14 @@ def answer_question(question, force_refresh=False):
             "Replit Secrets, then mention me again."
         )
 
-    prompt = QUESTION_PROMPT_TEMPLATE.format(question=question)
+    if history:
+        history_text = "\n".join(f"{role}: {content}" for role, content in history)
+        prompt = QUESTION_PROMPT_TEMPLATE_CONVERSATIONAL.format(
+            history=history_text, question=question
+        )
+    else:
+        prompt = QUESTION_PROMPT_TEMPLATE.format(question=question)
+
     url = (
         f"https://generativelanguage.googleapis.com/v1beta/models/"
         f"{GEMINI_MODEL}:generateContent?key={api_key}"
