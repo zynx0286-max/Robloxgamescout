@@ -1,0 +1,204 @@
+This is a very strong point to add the **personal AI channel**. Your bot now has:
+
+✅ Discovery
+✅ Filters
+✅ Scout Score
+✅ Developer Intelligence
+✅ Watch tracking
+✅ Scheduler
+✅ Gemini `/analyze`
+
+The next feature should be the **#ai-scout channel**, because it changes the bot from a command-based tool into an assistant.
+
+However, I would slightly modify Replit's plan.
+
+Do **not** make it respond to every message in the server. That can get messy.
+
+Make it only work in one dedicated channel:
+
+```text
+#ai-scout
+```
+
+Flow:
+
+```
+User sends message in #ai-scout
+          ↓
+Bot checks channel ID
+          ↓
+Reads question
+          ↓
+Gets Roblox/game data if needed
+          ↓
+Runs Gemini
+          ↓
+Replies
+```
+
+---
+
+## What it should support
+
+### 1. Analyze a game
+
+User:
+
+```
+@Roblox Game Scout analyze 994732206
+```
+
+Bot:
+
+```
+🤖 AI Scout Report
+
+Game:
+Blox Fruits
+
+Verdict:
+🟡 Established Game
+
+Scout Score:
+72/100
+
+Strengths:
+✅ Huge player base
+✅ Strong developer history
+
+Risks:
+⚠️ Not an early opportunity
+⚠️ High competition
+
+Recommendation:
+Use as a benchmark, not an acquisition target.
+```
+
+---
+
+### 2. Ask general questions
+
+User:
+
+```
+@Roblox Game Scout
+
+What type of Roblox games are trending right now?
+```
+
+Bot:
+
+```
+Based on recent tracked data:
+
+1. Simulator games
+2. Horror experiences
+3. Social games
+
+The strongest signals are coming from games with:
+- short session loops
+- frequent updates
+- strong retention mechanics
+```
+
+---
+
+### 3. Ask about a scanned opportunity
+
+User:
+
+```
+@Roblox Game Scout
+
+Should I contact this developer?
+```
+
+Bot checks:
+
+* Scout Score
+* Developer history
+* Growth
+* Risk
+
+Then answers.
+
+---
+
+## Recommended permissions
+
+Only allow:
+
+* Your account
+* Your staff/team later
+
+Don't make the AI channel public at first because Gemini calls cost money and people can spam it.
+
+---
+
+## Replit prompt
+
+Give it this:
+
+```
+Build the #ai-scout personal assistant channel.
+
+Requirements:
+
+- Create a configurable AI_CHANNEL_ID.
+- Add an on_message listener that only responds inside that channel.
+- Ignore messages from the bot itself.
+- Require a mention of the bot before responding.
+- Extract the user's question after the mention.
+- If a Roblox game ID is included, use the existing analyze_game() pipeline.
+- Otherwise use Gemini for general Roblox/business questions.
+- Reuse the existing Gemini cache system.
+- Do not modify scanner, scheduler, filters, tracker, or commands.
+- Add clear error handling for missing API keys or quota limits.
+```
+
+---
+
+After this, I would **not immediately deploy**.
+
+I would do a final testing phase:
+
+## Pre-deployment checklist
+
+### Discovery
+
+* `/scan`
+* Filters work
+* Scout Score works
+
+### Monitoring
+
+* Scheduler runs
+* Watch alerts work
+
+### AI
+
+* `/analyze`
+* `#ai-scout`
+* Gemini cache works
+
+### Stability
+
+* Bot runs for 24 hours
+* No crashes
+* No duplicate alerts
+* No API spam
+
+Then move to Render.
+
+One more thing: before deployment, add a proper `.env`/Secrets checklist:
+
+```
+DISCORD_TOKEN
+GEMINI_API_KEY
+ALERT_CHANNEL_ID
+AI_CHANNEL_ID
+```
+
+because deployment failures usually happen from missing environment variables.
+
+You are basically entering the "turn this from a project into a service" stage now. The next feature is the right one.

@@ -48,10 +48,13 @@ bot = MyBot()
 @bot.event
 async def on_message(message):
     """Reply to messages posted in the configured #ai-scout channel."""
-    # bot.user not set during pre-ready; defer to handler which early-exits.
+    # bot.user is None during pre-ready; handler early-exits on graceful
+    # failures when bot_user_id is 0.
     if bot.user is not None and message.author == bot.user:
         return
-    reply = await handle_ai_scout_message(message)
+    reply = await handle_ai_scout_message(
+        message, bot.user.id if bot.user else 0
+    )
     if not reply:
         return
     async with message.channel.typing():

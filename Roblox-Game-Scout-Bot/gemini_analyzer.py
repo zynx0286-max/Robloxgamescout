@@ -343,6 +343,137 @@ def analyze_game(game_data, force_refresh=False):
     return normalized
 
 
+# ---- freeform assistant helpers -----------------------------------------
+
+import hashlib
+
+
+QUESTION_CACHE_TTL_SECONDS = 86400
+QUESTION_PROMPT_TEMPLATE = (
+    "You are a Roblox scouting assistant. The user is asking about Roblox "
+    "games, scouting, acquisitions, developer outreach, or related "
+    "scouting topics. Answer concisely.\n\n"
+    "User question:\n{question}\n\n"
+    "If the question is about a specific game ID, defer to the analyze_game "
+    "pipeline which produces a structured report — this assistant tracks "
+    "freeform questions.\n\n"
+    "Respond in markdown. Prefer bullet lists for clarity."
+)
+
+
+def _ensure_question_table():
+    """Create ai_question_cache if missing."""
+    conn = sqlite3.connect(DATABASE)
+    cursor = conn.cursor()
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS ai_question_cache (
+        key TEXT PRIMARY KEY,
+        answer TEXT,
+        last_checked TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )
+    """)
+    conn.commit()
+    conn.close()
+
+
+def _question_cache_get(key):
+    """Return (answer, last_checked_epoch) or None."""
+    _ensure_question_table()
+    conn = sqlite3.connect(DATABASE)
+    cursor = conn.cursor()
+    cursor.execute("""
+    SELECT answer, strftime('%s', last_checked)
+    FROM ai_question_cache WHERE key = ?
+    """, (key,))
+    row = cursor.fetchone()
+    conn.close()
+    return row
+
+
+def _question_cache_put(key, answer):
+    """Upsert the cached answer for a question-hash key."""
+    _ensure_question_table()
+    conn = sqlite3.connect(DATABASE)
+    cursor = conn.cursor()
+    cursor.execute("""
+    INSERT INTO ai_question_cache (key, answer) VALUES (?, ?)
+    ON CONFLICT(key) DO UPDATE SET
+        answer=excluded.answer,
+        last_checked=CURRENT_TIMESTAMP
+    """, (key, answer))
+    conn.commit()
+    conn.close()
+
+
+def _question_cache_valid(row, now_epoch):
+    return bool(row) and (now_epoch - int(row[1] or 0)) < QUESTION_CACHE_TTL_SECONDS
+
+
+def answer_question(question, force_refresh=False):
+    """Send a freeform question to Gemini. Cached by question hash 24h.
+
+    Returns the markdown answer as a string. Quota, key presence, and
+    runtime errors are surfaced as friendly Discord messages without
+    crashing the listener.
+    """
+    question = (question or "").strip()
+    if not question:
+        return "🤖 I'm listening — try `@Roblox Game Scout <game id>` or a question."
+
+    key = hashlib.sha1(question.lower().encode()).hexdigest()
+
+    if not force_refresh:
+        cached = _question_cache_get(key)
+        if cached and _question_cache_valid(cached, int(__import__("time").time())):
+            return cached[0] or "(cached answer was empty)"
+
+    if quota_remaining() <= 0:
+        return (
+            "⏸️ Daily Gemini quota exhausted — assistant paused until "
+            "midnight UTC."
+        )
+
+    api_key = os.environ.get(GEMINI_API_KEY_ENV)
+    if not api_key:
+        return (
+            "ℹ️ AI assistant not configured yet — set `GEMINI_API_KEY` in "
+            "Replit Secrets, then mention me again."
+        )
+
+    prompt = QUESTION_PROMPT_TEMPLATE.format(question=question)
+    url = (
+        f"https://generativelanguage.googleapis.com/v1beta/models/"
+        f"{GEMINI_MODEL}:generateContent?key={api_key}"
+    )
+    try:
+        r = requests.post(
+            url,
+            json={"contents": [{"parts": [{"text": prompt}]}]},
+            timeout=30,
+        )
+        if r.status_code == 200:
+            data = r.json()
+            answer = (
+                data.get("candidates", [{}])[0]
+                .get("content", {})
+                .get("parts", [{}])[0]
+                .get("text", "")
+            ).strip()
+            if not answer:
+                answer = "(Gemini returned an empty response.)"
+        else:
+            answer = f"⚠️ Gemini returned HTTP {r.status_code}: {r.text[:200]}"
+    except Exception as exc:
+        answer = f"⚠️ Gemini call failed: `{exc}`"
+
+    _question_cache_put(key, answer)
+    record_gemini_call(0, "📝 Assistant answer")
+    return answer
+
+
+# ---- /freeform assistant helpers ----------------------------------------
+
+
 def format_report(name, analysis):
     """Render a Discord-friendly markdown report from a structured analysis."""
     verdict = analysis.get("verdict", "Unknown")
