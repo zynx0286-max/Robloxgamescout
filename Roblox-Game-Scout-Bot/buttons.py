@@ -10,7 +10,7 @@ class GameButtons(discord.ui.View):
         self.game = game
 
     @discord.ui.button(
-        label="💾 Save",
+        label="💾 Save Game",
         style=discord.ButtonStyle.green
     )
     async def save(
@@ -18,11 +18,12 @@ class GameButtons(discord.ui.View):
         interaction: discord.Interaction,
         button: discord.ui.Button
     ):
+        await interaction.response.defer(ephemeral=True)
         user_id = interaction.user.id
         save_game_for_user(user_id, self.game)
-        await interaction.response.send_message(
+        await interaction.followup.send(
             f"💾 **{self.game['name']}** saved to your watchlist!",
-            ephemeral=True
+            ephemeral=True,
         )
 
 
@@ -42,11 +43,11 @@ class AlertButtons(discord.ui.View):
         interaction: discord.Interaction,
         button: discord.ui.Button
     ):
-        user_id = interaction.user.id
-        save_game_for_user(user_id, self.game)
-        await interaction.response.send_message(
+        await interaction.response.defer(ephemeral=True)
+        save_game_for_user(interaction.user.id, self.game)
+        await interaction.followup.send(
             f"💾 **{self.game['name']}** saved to your watchlist!",
-            ephemeral=True
+            ephemeral=True,
         )
 
     @discord.ui.button(
@@ -58,11 +59,11 @@ class AlertButtons(discord.ui.View):
         interaction: discord.Interaction,
         button: discord.ui.Button
     ):
-        user_id = interaction.user.id
-        watch_game_for_user(user_id, self.game)
-        await interaction.response.send_message(
+        await interaction.response.defer(ephemeral=True)
+        watch_game_for_user(interaction.user.id, self.game)
+        await interaction.followup.send(
             f"👀 **{self.game['name']}** added to your watch list.",
-            ephemeral=True
+            ephemeral=True,
         )
 
     @discord.ui.button(
@@ -74,9 +75,9 @@ class AlertButtons(discord.ui.View):
         interaction: discord.Interaction,
         button: discord.ui.Button
     ):
-        user_id = interaction.user.id
-        ignore_game_for_user(user_id, self.game["id"])
-        await interaction.response.send_message(
+        await interaction.response.defer(ephemeral=True)
+        ignore_game_for_user(interaction.user.id, self.game["id"])
+        await interaction.followup.send(
             f"❌ **{self.game['name']}** ignored. It won't be posted again.",
-            ephemeral=True
+            ephemeral=True,
         )

@@ -51,6 +51,33 @@ def setup_commands(tree: app_commands.CommandTree):
             "Roblox Game Scout Bot is online!"
         )
 
+    @tree.command(
+        name="testbuttons",
+        description="Post a single test embed with the alert buttons"
+    )
+    async def testbuttons(interaction: discord.Interaction):
+        from embeds import create_alert_embed
+
+        sample_game = {
+            "id": 994732206,
+            "place_id": 2753915549,
+            "name": "Blox Fruits (Test Alert)",
+            "playing": 280000,
+            "visits": 62900000000,
+            "favorites": 19000000,
+            "growth": 12.5,
+            "score": 70,
+            "trend_score": 25,
+            "creator": "Gamer Robot Inc",
+            "source": "Test",
+        }
+
+        embed = create_alert_embed(sample_game)
+        await interaction.response.send_message(
+            embed=embed,
+            view=AlertButtons(sample_game),
+        )
+
     @tree.command(name="about", description="Learn what this bot does")
     async def about(interaction: discord.Interaction):
         await interaction.response.send_message(
