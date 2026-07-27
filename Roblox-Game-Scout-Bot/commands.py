@@ -17,7 +17,13 @@ from scanner import calculate_score, scan_games
 from categories import get_category
 from embeds import create_game_embed
 from buttons import GameButtons, AlertButtons
-from gemini_analyzer import analyze_game, format_report
+from gemini_analyzer import (
+    analyze_game,
+    format_report,
+    get_daily_limit,
+    get_usage_today,
+    quota_remaining,
+)
 
 
 def _reasons(game):
@@ -308,9 +314,27 @@ Max Game Age: {f['max_age']} days
         }
 
         await interaction.response.defer(thinking=True)
-        analysis = analyze_game(sample_game, force_refresh=True)
+        analysis = analyze_game(sample_game, force_refresh=False)
         report = format_report(sample_game["name"], analysis)
         await interaction.followup.send(report)
+
+    @tree.command(
+        name="aiusage",
+        description="Show today's Gemini quota usage"
+    )
+    async def aiusage(interaction: discord.Interaction):
+        limit = get_daily_limit()
+        used = get_usage_today()
+        remaining = quota_remaining()
+
+        await interaction.response.send_message(
+            f"🤖 **Gemini AI quota**\n\n"
+            f"**Daily limit:** {limit}\n"
+            f"**Used today:** {used}\n"
+            f"**Remaining:** {remaining}\n\n"
+            f"_Set `GEMINI_DAILY_LIMIT` in Replit Secrets to override the "
+            f"default of {limit if limit else '0'}._"
+        )
 
     @tree.command(name="scan", description="Find trending Roblox games")
     async def scan(interaction: discord.Interaction):

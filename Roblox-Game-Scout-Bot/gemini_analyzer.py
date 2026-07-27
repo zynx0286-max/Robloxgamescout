@@ -16,20 +16,26 @@ import requests
 DATABASE = "scoutbot.db"
 CACHE_TTL_SECONDS = 86400  # 24h
 GEMINI_API_KEY_ENV = "GEMINI_API_KEY"
+GEMINI_DAILY_LIMIT_ENV = "GEMINI_DAILY_LIMIT"
+DEFAULT_DAILY_LIMIT = 50
 GEMINI_MODEL = "gemini-1.5-flash"
 
 
+VERDICT_QUOTA = "⏸️ Daily Quota Reached"
 VERDICT_WORTH = "🟢 Worth Monitoring"
 VERDICT_WAIT = "🟡 Wait for More Data"
 VERDICT_RISKY = "🟠 Risky"
 VERDICT_AVOID = "🔴 Avoid"
 VERDICT_FALLBACK = "🟡 Data Only"
 
-VALID_VERDICTS = {VERDICT_WORTH, VERDICT_WAIT, VERDICT_RISKY, VERDICT_AVOID, VERDICT_FALLBACK}
+VALID_VERDICTS = {
+    VERDICT_WORTH, VERDICT_WAIT, VERDICT_RISKY,
+    VERDICT_AVOID, VERDICT_FALLBACK, VERDICT_QUOTA,
+}
 
 
 def _ensure_table():
-    """Create ai_analysis_cache if missing."""
+    """Create ai_analysis_cache and gemini_usage tables if missing."""
     conn = sqlite3.connect(DATABASE)
     cursor = conn.cursor()
     cursor.execute("""
@@ -44,6 +50,56 @@ def _ensure_table():
         last_checked TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )
     """)
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS gemini_usage (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        game_id INTEGER,
+        verdict TEXT,
+        timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+    """)
+    conn.commit()
+    conn.close()
+
+
+def get_daily_limit():
+    """Read GEMINI_DAILY_LIMIT from env; default is 50."""
+    raw = os.environ.get(GEMINI_DAILY_LIMIT_ENV)
+    try:
+        value = int(raw)
+        return max(0, value)
+    except (TypeError, ValueError):
+        return DEFAULT_DAILY_LIMIT
+
+
+def get_usage_today():
+    """Return the number of Gemini calls made today (UTC)."""
+    _ensure_table()
+    conn = sqlite3.connect(DATABASE)
+    cursor = conn.cursor()
+    cursor.execute("""
+    SELECT COUNT(*) FROM gemini_usage
+    WHERE date(timestamp) = date('now')
+    """)
+    row = cursor.fetchone()
+    conn.close()
+    return int(row[0] if row else 0)
+
+
+def quota_remaining():
+    """Daily limit minus today's usage. Capped at 0."""
+    return max(0, get_daily_limit() - get_usage_today())
+
+
+def record_gemini_call(game_id, verdict):
+    """Append a row to gemini_usage (idempotent table, append-only)."""
+    _ensure_table()
+    conn = sqlite3.connect(DATABASE)
+    cursor = conn.cursor()
+    cursor.execute(
+        "INSERT INTO gemini_usage (game_id, verdict) VALUES (?, ?)",
+        (int(game_id), verdict or ""),
+    )
     conn.commit()
     conn.close()
 
@@ -187,6 +243,26 @@ def _fallback(game_data):
     }
 
 
+def _quota_blocked_result(game_data):
+    """Soft response when daily quota is exhausted — preserves cache."""
+    score = (game_data.get("scout_score") or {}).get("total", 0)
+    return {
+        "verdict": VERDICT_QUOTA,
+        "confidence": 0,
+        "strengths": [
+            f"Scout Score = {score}/100 (cached locally).",
+        ],
+        "risks": [
+            "Daily Gemini quota exhausted — AI analysis paused today.",
+        ],
+        "recommendation": (
+            "Lower GEMINI_DAILY_LIMIT to be safe; raise later once costs are "
+            "clear. Live Gemini resumes at midnight UTC."
+        ),
+        "raw": "",
+    }
+
+
 def _normalize(result):
     """Force the result into our schema; replace bad values with safe defaults."""
     norm = {
@@ -246,6 +322,10 @@ def analyze_game(game_data, force_refresh=False):
                     "raw": cached[5] or "",
                 })
 
+    # Daily-quota gate: refuse live Gemini before making a request.
+    if quota_remaining() <= 0:
+        return _normalize(_quota_blocked_result(game_data))
+
     payload = build_prompt_input(game_data)
     prompt = PROMPT_TEMPLATE.format(game_data=json.dumps(payload, indent=2))
     raw_result = _call_gemini(prompt)
@@ -255,6 +335,9 @@ def analyze_game(game_data, force_refresh=False):
     else:
         normalized = _normalize(raw_result)
         normalized["raw"] = json.dumps(raw_result)
+        # Only record successful hits to quota usage. Failed calls don't burn
+        # adapter-side quota and shouldn't be charged against the limit.
+        record_gemini_call(game_id, normalized.get("verdict"))
 
     _cache_put(game_id, normalized)
     return normalized
