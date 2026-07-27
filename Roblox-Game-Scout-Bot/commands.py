@@ -65,7 +65,8 @@ def setup_commands(tree: app_commands.CommandTree):
 
     @tree.command(name="hello", description="Check if the bot is working")
     async def hello(interaction: discord.Interaction):
-        await interaction.response.send_message(
+        await interaction.response.defer(thinking=True)
+        await interaction.followup.send(
             "Roblox Game Scout Bot is online!"
         )
 
