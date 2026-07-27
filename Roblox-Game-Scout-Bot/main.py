@@ -75,7 +75,10 @@ async def on_message(message):
         )
         if not reply:
             return
-        await message.channel.send(reply)
+        # Ping the requester so they get a Discord notification, just like
+        # being @-mentioned by any other channel member.
+        ping = f"<@{message.author.id}>\n"
+        await message.channel.send(ping + reply)
 
 
 @bot.event

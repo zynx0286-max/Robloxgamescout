@@ -111,7 +111,14 @@ async def run_tracker(bot):
                 visits_delta=visits_delta,
                 tracked_since=date_added,
             )
-            await alert_channel.send(embed=embed)
+            # Ping the watcher via mention so they get a Discord notification
+            # even when away from the keyboard. Each (user_id, game_id) row
+            # produces its own ping, so co-watchers all get notified.
+            await alert_channel.send(
+                content=f"<@{user_id}> \ud83d\ude80 Major explosion on "
+                        f"**{game_name}** \u2014 check the embed below.",
+                embed=embed,
+            )
             tracker_alerts += 1
             logger.info(
                 "Tracker alert: %s (+%.1f%% CCU, +%.1f%% visits)",

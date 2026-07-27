@@ -1,0 +1,276 @@
+I have the important project context from the previous Roblox Game Scout Bot discussions. I can use the information available in this chat history/context, but I **do not have access to the actual screenshots from the old chat unless they are uploaded again here**. I do remember the architecture, features, roadmap, and decisions we made.
+
+Where you are right now:
+
+## Current Build Status
+
+Your bot is basically at **Version 1.0 core complete**.
+
+### Discovery Engine ✅
+
+* Roblox API integration
+* RoTrends integration
+* Smart filters
+* Custom user settings
+* Game scanning
+
+Your target filters:
+
+```
+Visits:
+100 - 1,500,000
+
+CCU:
+25 - 2,500
+
+1 Day Average CCU:
+10 - 2,500
+
+Average Session:
+> 5 minutes
+
+Created:
+Within 2 months
+```
+
+---
+
+### Ranking System ✅
+
+Scout Score v2:
+
+```
+📈 Growth             /30
+👥 Player Momentum    /25
+🆕 New Release        /15
+❤️ Like Ratio         /10
+👨‍💻 Developer History /20
+```
+
+The bot now explains why it likes a game instead of just saying "found game."
+
+---
+
+### Developer Intelligence ✅
+
+It checks:
+
+* Creator information
+* Previous games
+* Successful games
+* Group information
+* Caches data
+
+---
+
+### Monitoring System ✅
+
+You now have:
+
+* Save
+* Watch
+* Ignore
+* Automatic scheduler
+* Growth tracking
+* Explosion alerts
+
+The async issue was fixed, meaning the bot can run scheduled scans without freezing Discord.
+
+---
+
+### Gemini AI Analyst ✅
+
+You just finished:
+
+```
+/analyze <game_id>
+```
+
+It can combine:
+
+* Game stats
+* Scout Score
+* Developer Intelligence
+* Growth data
+
+and create a report.
+
+---
+
+# What is next?
+
+I would not jump into deployment yet.
+
+Your next steps should be:
+
+# Step 1 — Finish the AI Assistant Channel
+
+Build:
+
+```
+#ai-scout
+```
+
+Behavior:
+
+You:
+
+```
+@Roblox Game Scout analyze 123456
+```
+
+Bot:
+
+```
+Fetching data...
+
+✓ Roblox stats
+✓ Scout Score
+✓ Developer history
+✓ Gemini analysis
+
+Report...
+```
+
+But also normal conversation:
+
+You:
+
+```
+@Roblox Game Scout
+What makes a Roblox game blow up?
+```
+
+Bot:
+
+```
+Games usually explode because of:
+- strong retention loops
+- updates
+- social mechanics
+- discoverability
+```
+
+This makes it feel like a real assistant.
+
+---
+
+# Step 2 — Add Opportunity Channels
+
+This was part of the original vision from your friend's bot.
+
+Create:
+
+```
+#alerts
+```
+
+For:
+
+High quality opportunities.
+
+Example:
+
+```
+🚨 New Opportunity
+
+Game:
+Example Simulator
+
+Scout Score:
+87/100
+
+Why:
+✅ Strong growth
+✅ New release
+✅ Good developer
+
+Buttons:
+
+💾 Save
+👀 Watch
+🤖 Analyze
+❌ Ignore
+```
+
+---
+
+# Step 3 — Add Claim/Review System
+
+From your original idea.
+
+When a good game appears:
+
+Buttons:
+
+```
+Claim
+Accept
+Reject
+```
+
+Database stores:
+
+```
+game_id
+claimed_by
+status
+date
+```
+
+Useful if you ever have a team.
+
+---
+
+# Step 4 — Improve AI Filtering
+
+This is where your Gemini idea becomes powerful.
+
+Instead of only:
+
+```
+CCU > 500
+```
+
+AI can judge:
+
+* Is this genre overcrowded?
+* Does the thumbnail look competitive?
+* Does the developer update often?
+* Is the growth sustainable?
+* Is this worth contacting the creator?
+
+---
+
+# Step 5 — Deploy to Render
+
+Only after:
+
+✅ AI channel works
+✅ Scheduler runs 24 hours
+✅ No crashes
+✅ Environment variables ready
+
+Deployment:
+
+```
+DISCORD_TOKEN
+GEMINI_API_KEY
+ALERT_CHANNEL_ID
+AI_CHANNEL_ID
+DATABASE_URL (if needed)
+```
+
+---
+
+## My recommended order from here:
+
+1. ✅ Build `#ai-scout`
+2. ✅ Test Gemini conversations
+3. ✅ Add Analyze button to alerts
+4. ✅ Add Claim/Accept/Reject workflow
+5. ✅ Improve AI game evaluation
+6. ✅ Deploy Render
+7. Later: Website/dashboard
+
+You are past the "making a bot" stage. The next goal is making it feel like a **Roblox game investment analyst**.
