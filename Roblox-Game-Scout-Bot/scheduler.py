@@ -5,6 +5,7 @@ import time
 from discord.ext import tasks
 
 from scanner import scan_games
+from tracker import run_tracker
 from database import (
     is_alerted,
     mark_alerted,
@@ -87,6 +88,14 @@ async def _run_scan_once(bot):
     except Exception as exc:
         save_alert_log("scan_error", f"Scan failed: {exc}")
         logger.exception("Scheduled scan failed")
+
+    # Always run the watched-game tracker after the discovery scan, even if
+    # the discovery loop failed — tracking is independent.
+    try:
+        await run_tracker(bot)
+    except Exception as exc:
+        save_alert_log("tracker_error", f"Tracker failed: {exc}")
+        logger.exception("Tracker failed within scheduled cycle")
 
 
 def start_scheduler(bot):

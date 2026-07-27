@@ -144,3 +144,84 @@ def create_alert_embed(game):
     embed.set_footer(text=f"Universe ID: {game['id']} | Detected {time.strftime('%H:%M:%S')}")
 
     return embed
+
+
+def create_tracker_embed(
+    game_name,
+    old_players,
+    new_players,
+    old_visits,
+    new_visits,
+    players_delta,
+    visits_delta,
+    tracked_since="",
+):
+    """Build a '🚀 Watched Game Explosion' card for the tracker channel."""
+    players_pct = (
+        f"+{players_delta:.1f}%" if players_delta >= 0 else f"{players_delta:.1f}%"
+    )
+    visits_pct = (
+        f"+{visits_delta:.1f}%" if visits_delta >= 0 else f"{visits_delta:.1f}%"
+    )
+
+    if players_delta >= 50 or visits_delta >= 20:
+        color = discord.Color.gold()
+        severity = "🚀 MAJOR EXPLOSION"
+    elif players_delta >= PLAYERS_THRESHOLD_TEXT or visits_delta >= VISITS_THRESHOLD_TEXT:
+        color = discord.Color.orange()
+        severity = "🚀 Watched Game Activity"
+    else:
+        color = discord.Color.blue()
+        severity = "👀 Watched Game Change"
+
+    embed = discord.Embed(
+        title=severity,
+        description=f"**{game_name}** is gaining serious momentum!",
+        color=color,
+        timestamp=discord.utils.utcnow(),
+    )
+
+    embed.add_field(
+        name="👥 Players",
+        value=f"{int(old_players):,} → {int(new_players):,}",
+        inline=False,
+    )
+
+    embed.add_field(
+        name="📈 Growth",
+        value=players_pct,
+        inline=True
+    )
+
+    embed.add_field(
+        name="👀 Visits",
+        value=f"{int(old_visits):,} → {int(new_visits):,}",
+        inline=False,
+    )
+
+    embed.add_field(
+        name="📊 Visits Δ",
+        value=visits_pct,
+        inline=True
+    )
+
+    embed.add_field(
+        name="⏱ Tracked since",
+        value=(tracked_since[:10] if tracked_since else "—"),
+        inline=True,
+    )
+
+    embed.add_field(
+        name="🔎 Reason",
+        value="Large CCU increase" if players_delta >= 50 else "Significant movement",
+        inline=False,
+    )
+
+    embed.set_footer(text="Game Scout tracker")
+
+    return embed
+
+
+# Module-level thresholds used by create_tracker_embed (mirror tracker.py values).
+PLAYERS_THRESHOLD_TEXT = 20
+VISITS_THRESHOLD_TEXT = 5

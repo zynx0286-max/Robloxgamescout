@@ -1,0 +1,202 @@
+Nice. You are ahead of where you originally planned. The important thing is that the architecture is now correct:
+
+✅ `saved_games` = bookmarks
+✅ `watched_games` = active monitoring
+✅ `ignored_games` = blacklist
+✅ Scheduler = running every 15 minutes
+✅ Database snapshots = ready
+
+I agree with Replit's next milestone: **build the Watched Game Tracker next.**
+
+Why?
+
+Because right now the 👀 Watch button collects data but does nothing with it. The tracker turns that button into an actual feature.
+
+---
+
+# Next Step: Watched Game Tracker
+
+The flow should become:
+
+```
+watched_games database
+          ↓
+scheduler runs every 15 minutes
+          ↓
+gets latest Roblox stats
+          ↓
+compares with saved snapshot
+          ↓
+detects major changes
+          ↓
+updates database
+          ↓
+sends alert
+```
+
+Example:
+
+Before:
+
+```
+Blox Fruits
+
+Players:
+280,500
+
+Visits:
+62.9B
+```
+
+15 minutes later:
+
+```
+Players:
+350,000
+```
+
+Difference:
+
+```
++69,500 players
++24.8%
+```
+
+Bot sends:
+
+```
+🚀 Watched Game Explosion
+
+🎮 Blox Fruits
+
+👥 Players:
+280,500 → 350,000
+
+📈 Growth:
++24.8%
+
+Detected:
+Large CCU increase
+
+Tracked since:
+July 27, 2026
+```
+
+---
+
+# Ask Replit to build this next
+
+Use this prompt:
+
+```
+Build the watched_games tracker.
+
+Requirements:
+
+- Create a new tracker function separate from scanner.py.
+- It should run inside the existing scheduler every 15 minutes.
+- For every game in watched_games:
+  1. Fetch current Roblox stats.
+  2. Compare current players and visits with last_players and last_visits.
+  3. Calculate percentage change.
+  4. If player growth is significant (example: 20%+ increase), send an alert to #alerts.
+  5. Update last_players, last_visits, and last_checked after every check.
+
+Do not change the Save, Watch, or Ignore buttons.
+Do not remove existing functionality.
+```
+
+---
+
+# After that, test it
+
+Don't wait for a real game explosion. Add a testing mode.
+
+Ask Replit:
+
+```
+Add a developer test command /testtracker that simulates a watched game increasing by 50% so we can verify the alert embed works.
+```
+
+Then you can confirm:
+
+* Database updates ✅
+* Alert posts ✅
+* Embed works ✅
+
+---
+
+# After Watched Tracker
+
+The order I would follow:
+
+## 1. Watched Tracker
+
+(you are here)
+
+↓
+
+## 2. Smart Filters
+
+Make `/settings` actually powerful:
+
+Example:
+
+```
+Minimum Players:
+500
+
+Maximum Visits:
+5,000,000
+
+Minimum Growth:
+25%
+
+Game Age:
+Less than 30 days
+
+Genre:
+Simulator
+Tycoon
+Horror
+```
+
+↓
+
+## 3. Scout Score
+
+Replace basic filtering with a ranking system:
+
+```
+Scout Score: 87/100
+
++30 Growth
++20 Low Competition
++15 Recent Update
++12 Strong Like Ratio
++10 Good Creator History
+```
+
+↓
+
+## 4. Developer Intelligence
+
+Analyze:
+
+* Creator history
+* Other games
+* Group size
+* Previous success
+* Update frequency
+
+↓
+
+## 5. Gemini AI
+
+AI becomes the final layer:
+
+"Should we investigate this game?"
+
+---
+
+One thing I would **not** do yet: build dashboards or fancy UI. The core product is the data pipeline. If the bot can reliably discover games and explain why they matter, everything else becomes much easier.

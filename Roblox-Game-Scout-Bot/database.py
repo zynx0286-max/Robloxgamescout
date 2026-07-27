@@ -353,3 +353,35 @@ def ignore_game_for_user(user_id, game_id):
 
     conn.commit()
     conn.close()
+
+
+def get_all_watched_games():
+    """Return every watched game across all users for the tracker."""
+    conn = sqlite3.connect(DATABASE)
+    cursor = conn.cursor()
+
+    cursor.execute("""
+    SELECT user_id, game_id, game_name, last_players, last_visits, date_added
+    FROM watched_games
+    """)
+
+    rows = cursor.fetchall()
+    conn.close()
+    return rows
+
+
+def update_watched_game_snapshot(game_id, players, visits):
+    """Update the stored CCU/visits snapshot for a tracked game."""
+    conn = sqlite3.connect(DATABASE)
+    cursor = conn.cursor()
+
+    cursor.execute("""
+    UPDATE watched_games
+    SET last_players = ?,
+        last_visits = ?,
+        last_checked = CURRENT_TIMESTAMP
+    WHERE game_id = ?
+    """, (players, visits, game_id))
+
+    conn.commit()
+    conn.close()

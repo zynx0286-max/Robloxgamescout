@@ -78,6 +78,28 @@ def setup_commands(tree: app_commands.CommandTree):
             view=AlertButtons(sample_game),
         )
 
+    @tree.command(
+        name="testtracker",
+        description="Simulate a +50% CCU alert for a tracked game (dev only)"
+    )
+    async def testtracker(interaction: discord.Interaction):
+        from embeds import create_tracker_embed
+
+        embed = create_tracker_embed(
+            game_name="Blox Fruits (Simulated)",
+            old_players=200000,
+            new_players=300000,
+            old_visits=62000000000,
+            new_visits=62500000000,
+            players_delta=50.0,
+            visits_delta=0.81,
+            tracked_since="2026-07-27",
+        )
+        await interaction.response.send_message(
+            "🧪 **Simulated tracker alert** — proving the embed layout works:",
+            embed=embed,
+        )
+
     @tree.command(name="about", description="Learn what this bot does")
     async def about(interaction: discord.Interaction):
         await interaction.response.send_message(
