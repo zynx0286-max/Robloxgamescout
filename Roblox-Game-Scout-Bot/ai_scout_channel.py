@@ -18,8 +18,8 @@ Two response modes:
 Behavior:
   * Only responds inside the configured channel (``AI_CHANNEL_ID`` per the
     spec; ``AI_SCOUT_ID`` is accepted as a legacy alias).
-  * Only responds when the bot is mentioned.
-  * Bot-authored and command-pipeline messages are skipped.
+  * Responds to anything typed in that channel — no @-mention required.
+  * Bot-authored messages are skipped to avoid reply loops.
   * Slash-command work, scheduler, tracker, filters, and buttons are
     untouched.
 """
@@ -207,8 +207,12 @@ async def handle_ai_scout_message(message, bot_user_id):
     """Process a single Discord message in the configured #ai-scout channel.
 
     Returns the response text the bot should reply with, or None for
-    silence. The channel + mention filters early-exit on regular channels
-    so binding this to ``on_message`` globally is safe.
+    silence. The channel + bot-author filters early-exit on regular
+    channels, so binding this to ``on_message`` globally is safe.
+
+    Mentions are no longer required — any user-typed message in the
+    configured channel triggers a reply. ``bot_user_id`` is accepted but
+    reserved for future mention-pass-through if reintroduced.
     """
     if message.author.bot:
         return None
@@ -216,10 +220,11 @@ async def handle_ai_scout_message(message, bot_user_id):
     if message.channel.id != resolve_ai_channel_id():
         return None
 
-    if not _is_bot_mentioned(message, bot_user_id):
-        return None
-
     cleaned = _strip_mentions(message.content)
+    if not cleaned:
+        # Bare @mention with no body — rephrase as a quick hint.
+        cleaned = "?"
+
     candidates = _DIGIT_RE.findall(cleaned)
     if candidates:
         try:
