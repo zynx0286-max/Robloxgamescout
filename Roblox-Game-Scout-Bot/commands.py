@@ -5,7 +5,7 @@ from roblox_api import get_game_info
 from scanner import calculate_score, scan_games
 from categories import get_category
 from embeds import create_game_embed
-from buttons import GameButtons
+from buttons import GameButtons, AlertButtons
 
 
 def _reasons(game):
