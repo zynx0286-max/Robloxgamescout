@@ -1,0 +1,2 @@
+- [Discord.py stacked command decorators](discord-py-stacked-decorators.md) — stacking two `@tree.command(...)` decorators on one async function fails with `command function must be a coroutine function`.
+- [SQLite in-place migrations](sqlite-alter-table-migrations.md) — when a migration function both recreates a table and tries `ALTER TABLE ADD COLUMN`, re-fetch `PRAGMA table_info` after the recreate.

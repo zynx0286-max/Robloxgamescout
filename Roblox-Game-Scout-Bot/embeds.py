@@ -4,12 +4,25 @@ from categories import get_category
 from opportunity import analyze_game, get_opportunity_level
 
 
+def _format_breakdown_lines(scout_score):
+    """Render a Scout Score breakdown as Markdown lines."""
+    total = scout_score.get("total", 0)
+    verdict = scout_score.get("verdict", "")
+    lines = [f"**⭐ Scout Score: {total}/100** — {verdict}"]
+
+    for label, pts, reason in scout_score.get("breakdown", []):
+        lines.append(f"{label}: **+{pts}** pts  ·  {reason}")
+
+    return "\n".join(lines)
+
+
 def create_game_embed(game):
     """Create a Discord embed card for a Roblox game opportunity."""
     category = get_category(game)
     growth = game.get("growth", 0)
     growth_text = f"+{growth}%" if growth > 0 else f"{growth}%"
     place_id = game.get("place_id", game["id"])
+    scout = game.get("scout_score") or {"total": game.get("score", 0), "breakdown": []}
 
     embed = discord.Embed(
         title=f"🎮 {game['name']}",
@@ -37,12 +50,6 @@ def create_game_embed(game):
     )
 
     embed.add_field(
-        name="⭐ Score",
-        value=f"{game.get('score', 0)}/100",
-        inline=True
-    )
-
-    embed.add_field(
         name="📈 Growth",
         value=growth_text,
         inline=True
@@ -58,6 +65,12 @@ def create_game_embed(game):
         name="🌐 Game Link",
         value=f"[Open on Roblox](https://www.roblox.com/games/{place_id})",
         inline=True
+    )
+
+    embed.add_field(
+        name="⭐ Scout Score Breakdown",
+        value=_format_breakdown_lines(scout),
+        inline=False
     )
 
     embed.add_field(
@@ -77,6 +90,7 @@ def create_alert_embed(game):
     growth_text = f"+{growth}%" if growth > 0 else f"{growth}%"
     place_id = game.get("place_id", game["id"])
     opportunity = get_opportunity_level(game)
+    scout = game.get("scout_score") or {"total": game.get("score", 0), "breakdown": []}
 
     if "🔥 HIGH" in opportunity:
         color = discord.Color.gold()
@@ -122,8 +136,8 @@ def create_alert_embed(game):
 
     embed.add_field(
         name="⭐ Scout Score",
-        value=f"{game.get('score', 0)}/100",
-        inline=True
+        value=_format_breakdown_lines(scout),
+        inline=False
     )
 
     embed.add_field(

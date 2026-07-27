@@ -17,6 +17,7 @@ def _log(message):
 
 
 def calculate_score(game):
+    """Legacy flat score (0-100). Still used by /scoretest."""
     score = 0
 
     # Player activity
@@ -48,13 +49,128 @@ def calculate_score(game):
     return score
 
 
+def _new_release_points(game):
+    """Return (points, label, reason) for the New Release component."""
+    stamp = game.get("created") or game.get("first_seen")
+    if not stamp:
+        return 0, "🆕 New release", "Release date unknown"
+
+    try:
+        from datetime import datetime, timezone
+
+        iso = str(stamp).replace("Z", "+00:00")
+        dt = datetime.fromisoformat(iso)
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        age_days = (datetime.now(timezone.utc) - dt).days
+    except Exception:
+        return 0, "🆕 New release", "Release date unresolved"
+
+    if age_days <= 30:
+        return 15, "🆕 New release", f"🔥 Hot launch ({age_days}d old)"
+    if age_days <= 90:
+        return 10, "🆕 New release", f"📅 Recent release ({age_days}d)"
+    if age_days <= 180:
+        return 5, "🆕 New release", f"📅 Modestly aged ({age_days}d)"
+    return 0, "🆕 New release", f"⏳ Mature game ({age_days}d)"
+
+
+def _developer_history_points(game):
+    """Developer history is not yet tracked; stub returns 0 unless we have a creator."""
+    creator = game.get("creator")
+    if not creator:
+        return 0, "👨\u200d💻 Developer history", "Unknown creator"
+    return 0, "👨\u200d💻 Developer history", f"By {creator} (history not yet tracked)"
+
+
+def calculate_scout_score(game):
+    """Scout Score 2.0 — composable breakdown summing to 0-100."""
+    breakdown = []
+
+    # 📈 Growth (0-30)
+    g = game.get("growth", 0)
+    if g >= 100:
+        growth_pts = 30
+        growth_text = "🚀 Triple-digit growth"
+    elif g >= 50:
+        growth_pts = 25
+        growth_text = "🚀 Strong growth"
+    elif g >= 25:
+        growth_pts = 20
+        growth_text = "📈 Solid growth"
+    elif g >= 10:
+        growth_pts = 10
+        growth_text = "📈 Mild growth"
+    else:
+        growth_pts = 0
+        growth_text = "📊 Slow growth"
+    breakdown.append(("📈 Growth", growth_pts, growth_text))
+
+    # 👥 Player momentum (0-25)
+    p = game.get("playing", 0)
+    if p >= 10000:
+        m_pts, m_text = 25, "🏟 Stadium-scale activity"
+    elif p >= 5000:
+        m_pts, m_text = 20, "🎯 Heavy momentum"
+    elif p >= 1000:
+        m_pts, m_text = 15, "🎯 Solid activity"
+    elif p >= 100:
+        m_pts, m_text = 8, "👥 Modest activity"
+    else:
+        m_pts, m_text = 0, "⏳ Quiet room"
+    breakdown.append(("👥 Player momentum", m_pts, f"{m_text} ({p:,} CCU)"))
+
+    # 🆕 New release bonus (0-15)
+    nr_pts, nr_label, nr_text = _new_release_points(game)
+    breakdown.append((nr_label, nr_pts, nr_text))
+
+    # ❤️ Like ratio (0-10)
+    visits = game.get("visits", 0) or 0
+    favs = game.get("favorites", 0) or 0
+    if visits > 0 and favs > 0:
+        ratio = favs / visits
+        if ratio >= 0.05:
+            like_pts, like_text = 10, "❤️ Very high favor rate"
+        elif ratio >= 0.02:
+            like_pts, like_text = 7, "❤️ High favor rate"
+        elif ratio >= 0.005:
+            like_pts, like_text = 4, "❤️ Decent favor rate"
+        else:
+            like_pts, like_text = 0, "❤️ Low favor rate"
+    else:
+        like_pts, like_text = 0, "❤️ Favorites not yet tracked"
+    breakdown.append(("❤️ Like ratio", like_pts, like_text))
+
+    # 👨‍💻 Developer history (0-20 reserve — currently 0 until we add metrics)
+    dev_pts, dev_label, dev_text = _developer_history_points(game)
+    breakdown.append((dev_label, dev_pts, dev_text))
+
+    total = sum(pts for _, pts, _ in breakdown)
+    return {"total": min(total, 100), "breakdown": breakdown, "verdict": _score_verdict(total)}
+
+
+def _score_verdict(total):
+    """Verdict label based on total score."""
+    if total >= 80:
+        return "🐐 Elite opportunity"
+    if total >= 60:
+        return "🔥 Strong opportunity"
+    if total >= 40:
+        return "📈 Worth watching"
+    if total >= 20:
+        return "👀 Mild signal"
+    return "⚪ Low signal"
+
+
 def rank_games(games):
+    """Attach both legacy score and Scout Score 2.0, then sort by Scout total."""
     for game in games:
         game["score"] = calculate_score(game)
+        game["scout_score"] = calculate_scout_score(game)
 
     games.sort(
-        key=lambda x: x["score"],
-        reverse=True
+        key=lambda x: x["scout_score"]["total"],
+        reverse=True,
     )
 
     return games
