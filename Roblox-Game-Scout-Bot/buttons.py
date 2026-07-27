@@ -36,7 +36,6 @@ class AlertButtons(discord.ui.View):
     @discord.ui.button(
         label="💾 Save",
         style=discord.ButtonStyle.green,
-        custom_id="alert_save"
     )
     async def save(
         self,
@@ -53,7 +52,6 @@ class AlertButtons(discord.ui.View):
     @discord.ui.button(
         label="👀 Watch",
         style=discord.ButtonStyle.blurple,
-        custom_id="alert_watch"
     )
     async def watch(
         self,
@@ -70,7 +68,6 @@ class AlertButtons(discord.ui.View):
     @discord.ui.button(
         label="❌ Ignore",
         style=discord.ButtonStyle.red,
-        custom_id="alert_ignore"
     )
     async def ignore(
         self,
