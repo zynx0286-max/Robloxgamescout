@@ -22,13 +22,18 @@ class GameButtons(discord.ui.View):
         user_id = interaction.user.id
         save_game_for_user(user_id, self.game)
         await interaction.followup.send(
-            f"💾 **{self.game['name']}** saved to your watchlist!",
+            f"💾 **{self.game['name']}** bookmarked. View it later with `/watchlist`.",
             ephemeral=True,
         )
 
 
 class AlertButtons(discord.ui.View):
-    """Buttons that appear on automated alert embeds."""
+    """Buttons that appear on automated alert embeds.
+
+    💾 Save  → bookmark only (saved_games, viewable via /watchlist)
+    👀 Watch → active tracking (watched_games, scheduler will monitor deltas)
+    ❌ Ignore → suppress future alerts (ignored_games)
+    """
 
     def __init__(self, game):
         super().__init__(timeout=None)
@@ -46,7 +51,8 @@ class AlertButtons(discord.ui.View):
         await interaction.response.defer(ephemeral=True)
         save_game_for_user(interaction.user.id, self.game)
         await interaction.followup.send(
-            f"💾 **{self.game['name']}** saved to your watchlist!",
+            f"💾 **Saved**: {self.game['name']}\n"
+            f"Bookmark only — view later with `/watchlist`.",
             ephemeral=True,
         )
 
@@ -62,7 +68,8 @@ class AlertButtons(discord.ui.View):
         await interaction.response.defer(ephemeral=True)
         watch_game_for_user(interaction.user.id, self.game)
         await interaction.followup.send(
-            f"👀 **{self.game['name']}** added to your watch list.",
+            f"👀 **Now tracking**: {self.game['name']}\n"
+            f"You'll get a 🚀 alert if its player count changes significantly.",
             ephemeral=True,
         )
 

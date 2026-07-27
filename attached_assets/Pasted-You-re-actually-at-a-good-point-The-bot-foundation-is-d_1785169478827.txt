@@ -1,0 +1,230 @@
+You're actually at a good point. The bot foundation is done:
+
+✅ Discord bot works
+✅ Slash commands work
+✅ Database works
+✅ Scheduler works
+✅ Duplicate detection works
+✅ Buttons work
+
+Now you are entering the **actual Game Scout product phase**.
+
+About the Save vs Watch question: I would keep them separate, but I would **change their purpose now** so users understand them.
+
+Right now:
+
+* 💾 Save = stores the game
+* 👀 Watch = also stores the game
+
+That is confusing because there is no difference.
+
+I would tell Replit to change it like this:
+
+---
+
+## 💾 Save Game (Bookmark)
+
+Purpose:
+
+> "I want to remember this game."
+
+Database:
+`saved_games`
+
+User can view:
+
+```
+/watchlist
+
+Saved Games:
+
+1. Drag Drive Simulator
+   Saved: July 27
+
+2. Tales Of Tanorio
+   Saved: July 27
+```
+
+No automatic alerts.
+
+---
+
+## 👀 Watch Game (Tracking)
+
+Purpose:
+
+> "I want the bot to monitor this game."
+
+Create a new table:
+
+```
+watched_games
+```
+
+Store:
+
+```
+game_id
+user_id
+added_date
+last_players
+last_visits
+```
+
+Then later:
+
+Every 30 minutes:
+
+```
+Check watched games
+
+Before:
+Players: 2,000
+
+Now:
+Players: 5,000
+
+Difference:
++150%
+
+Send:
+🚀 Game exploded
+```
+
+Example:
+
+```
+👀 Watch Alert
+
+Drag Drive Simulator
+
+Players increased:
+2,000 → 5,000
+
+Growth:
++150%
+
+Reason:
+Rapid CCU increase
+```
+
+---
+
+## ❌ Ignore
+
+Keep exactly as it is.
+
+Database:
+
+```
+ignored_games
+```
+
+Meaning:
+
+"Never show me this game again."
+
+---
+
+## What I would do next
+
+Do NOT build Developer Intelligence yet.
+
+Your next order should be:
+
+### Step 1 — Finish #alerts posting
+
+The scheduler currently finds games but doesn't publicly show them.
+
+Build:
+
+```
+scanner.py
+        ↓
+scheduler.py
+        ↓
+alerts channel
+        ↓
+embed + buttons
+```
+
+---
+
+### Step 2 — Improve the alert embed
+
+Current:
+
+```
+Game
+Players
+Creator
+```
+
+Upgrade to:
+
+```
+🚨 Roblox Opportunity
+
+🎮 Name:
+Drag Drive Simulator
+
+👥 CCU:
+4,382
+
+👁 Visits:
+2.4M
+
+⭐ Favorites:
+35K
+
+📊 Scout Score:
+82/100
+
+Why detected:
+✅ Player growth
+✅ Recent update
+✅ Low competition
+
+Creator:
+Example Studios
+
+[💾 Save]
+[👀 Watch]
+[❌ Ignore]
+```
+
+---
+
+### Step 3 — Add filters
+
+Before AI, make the bot configurable:
+
+Example:
+
+```
+/settings
+
+Minimum CCU:
+500
+
+Maximum Visits:
+5M
+
+Minimum Growth:
+25%
+
+Genre:
+Simulator
+Tycoon
+Horror
+```
+
+---
+
+Your immediate next Replit prompt should be:
+
+> Keep Save and Watch separate. Save should only bookmark games. Create a watched_games database table and make Watch add games there instead. Do not implement automatic tracking yet. After that, connect the scheduler results to the #alerts channel with embeds and buttons.
+
+This keeps the architecture clean.
+
+Also, nice job not rushing into AI yet. The hardest part of this project is not Gemini — it's building a reliable data pipeline that finds good games consistently. Once that works, AI becomes an upgrade instead of a distraction.

@@ -96,10 +96,22 @@ def create_database():
         user_id INTEGER NOT NULL,
         game_id INTEGER NOT NULL,
         game_name TEXT,
+        last_players INTEGER,
+        last_visits INTEGER,
+        last_checked TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         date_added TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         UNIQUE(user_id, game_id)
     )
     """)
+
+    # Migrate older watched_games tables that pre-date tracking columns.
+    existing_watched_columns = set(_table_columns(cursor, "watched_games"))
+    if "last_players" not in existing_watched_columns:
+        cursor.execute("ALTER TABLE watched_games ADD COLUMN last_players INTEGER")
+    if "last_visits" not in existing_watched_columns:
+        cursor.execute("ALTER TABLE watched_games ADD COLUMN last_visits INTEGER")
+    if "last_checked" not in existing_watched_columns:
+        cursor.execute("ALTER TABLE watched_games ADD COLUMN last_checked TIMESTAMP")
 
     cursor.execute("""
     CREATE TABLE IF NOT EXISTS ignored_games (
@@ -287,17 +299,46 @@ def save_alert_log(event, message):
 
 
 def watch_game_for_user(user_id, game):
-    """Record a game on a user's active watch list."""
+    """Record a game on a user's active watch list (with snapshot stats)."""
     conn = sqlite3.connect(DATABASE)
     cursor = conn.cursor()
 
     cursor.execute("""
-    INSERT OR IGNORE INTO watched_games (user_id, game_id, game_name)
-    VALUES (?, ?, ?)
-    """, (user_id, game["id"], game.get("name", "")))
+    INSERT INTO watched_games
+    (user_id, game_id, game_name, last_players, last_visits)
+    VALUES (?, ?, ?, ?, ?)
+    ON CONFLICT(user_id, game_id) DO UPDATE SET
+        game_name = excluded.game_name,
+        last_players = excluded.last_players,
+        last_visits = excluded.last_visits,
+        last_checked = CURRENT_TIMESTAMP
+    """, (
+        user_id,
+        game["id"],
+        game.get("name", ""),
+        game.get("playing"),
+        game.get("visits"),
+    ))
 
     conn.commit()
     conn.close()
+
+
+def get_watched_games_for_user(user_id):
+    """Return all watched games for a user."""
+    conn = sqlite3.connect(DATABASE)
+    cursor = conn.cursor()
+
+    cursor.execute("""
+    SELECT game_id, game_name, last_players, last_visits, date_added
+    FROM watched_games
+    WHERE user_id = ?
+    ORDER BY date_added DESC
+    """, (user_id,))
+
+    rows = cursor.fetchall()
+    conn.close()
+    return rows
 
 
 def ignore_game_for_user(user_id, game_id):
