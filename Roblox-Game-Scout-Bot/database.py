@@ -90,6 +90,27 @@ def create_database():
     )
     """)
 
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS watched_games (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id INTEGER NOT NULL,
+        game_id INTEGER NOT NULL,
+        game_name TEXT,
+        date_added TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(user_id, game_id)
+    )
+    """)
+
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS ignored_games (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id INTEGER NOT NULL,
+        game_id INTEGER NOT NULL,
+        date_ignored TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(user_id, game_id)
+    )
+    """)
+
     conn.commit()
     conn.close()
 
@@ -260,6 +281,34 @@ def save_alert_log(event, message):
     INSERT INTO scan_log (event, message)
     VALUES (?, ?)
     """, (event, message))
+
+    conn.commit()
+    conn.close()
+
+
+def watch_game_for_user(user_id, game):
+    """Record a game on a user's active watch list."""
+    conn = sqlite3.connect(DATABASE)
+    cursor = conn.cursor()
+
+    cursor.execute("""
+    INSERT OR IGNORE INTO watched_games (user_id, game_id, game_name)
+    VALUES (?, ?, ?)
+    """, (user_id, game["id"], game.get("name", "")))
+
+    conn.commit()
+    conn.close()
+
+
+def ignore_game_for_user(user_id, game_id):
+    """Record a game the user wants suppressed from future alerts."""
+    conn = sqlite3.connect(DATABASE)
+    cursor = conn.cursor()
+
+    cursor.execute("""
+    INSERT OR IGNORE INTO ignored_games (user_id, game_id)
+    VALUES (?, ?)
+    """, (int(user_id), int(game_id)))
 
     conn.commit()
     conn.close()

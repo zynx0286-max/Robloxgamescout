@@ -1,0 +1,196 @@
+This is exactly the kind of progress you want. Replit didn't jump ahead—it completed the scheduler first, which is the right order.
+
+**I would not wait 15 minutes** for a full cycle. Instead, test it immediately by temporarily changing the interval to something like **30 seconds or 1 minute**, verify it works, then change it back to 15 minutes. That will save you a lot of time while developing.
+
+---
+
+# Phase 2: Automatic Alerts
+
+Now we're going to make the scheduler actually post opportunities into your Discord server.
+
+## Step 1: Create an `#alerts` channel
+
+Create a new text channel:
+
+```text
+#alerts
+```
+
+Your bot will only post automatic opportunities there.
+
+---
+
+## Step 2: Store the Alert Channel ID
+
+Instead of hardcoding the channel name, use a channel ID.
+
+In Discord:
+
+1. Enable **Developer Mode** (Settings → Advanced → Developer Mode).
+2. Right-click `#alerts`.
+3. Click **Copy Channel ID**.
+
+Add it to your Replit Secrets or `.env`:
+
+```text
+ALERT_CHANNEL_ID=123456789012345678
+```
+
+Then load it in `config.py`.
+
+---
+
+## Step 3: Ask Replit for one feature only
+
+Give Replit this prompt:
+
+> Modify the scheduler so that when `scan_games()` returns a new game, it posts an embed to the Discord channel specified by `ALERT_CHANNEL_ID`. Use the existing `embeds.py` if available. Do not remove any current functionality. Continue using `alerted_games` to prevent duplicate alerts.
+
+This keeps the change small and easier to debug.
+
+---
+
+## Step 4: Design a professional alert embed
+
+Instead of just dumping data, make it useful.
+
+```
+🚨 New Roblox Opportunity
+
+🎮 Game
+Drag Drive Simulator
+
+👥 Current Players
+4,382
+
+📈 Growth
++41%
+
+👤 Creator
+Example Studios
+
+⭐ Scout Score
+82/100
+
+Reason
+• Fast player growth
+• Recently updated
+• Below target visit count
+
+Buttons
+
+💾 Save
+👀 Watch
+❌ Ignore
+```
+
+Later we'll make the score smarter.
+
+---
+
+# Step 5: Make the buttons useful
+
+Right now, don't worry about AI.
+
+Each button should do one thing:
+
+### 💾 Save
+
+Adds the game to `saved_games`.
+
+---
+
+### 👀 Watch
+
+Adds the game to `watchlist`.
+
+The scheduler can later check watched games more frequently.
+
+---
+
+### ❌ Ignore
+
+Adds the game to an ignored table so it never gets posted again.
+
+---
+
+# Step 6: Logging
+
+Every automatic scan should print something like:
+
+```text
+[10:30 AM]
+Scanning Roblox...
+
+21 games checked
+3 matched filters
+2 duplicates skipped
+1 alert posted
+
+Completed in 4.1 seconds
+```
+
+Good logs make debugging much easier.
+
+---
+
+# What comes after this
+
+Once automatic alerts are working, we'll build the features that make your bot stand out:
+
+### Phase 3 — Smart Filters
+
+* Minimum/maximum CCU
+* Minimum/maximum visits
+* Growth percentage
+* Game age
+* Genre
+* Monetization type
+* Paid Access
+* Private/Public
+* Favorites
+* Likes ratio
+
+### Phase 4 — Scout Score
+
+Instead of random numbers, calculate a score based on:
+
+* Player growth
+* CCU trend
+* Visits
+* Favorites
+* Update frequency
+* Like ratio
+* Developer history
+
+### Phase 5 — Gemini AI
+
+Gemini will answer questions like:
+
+* Why is this game trending?
+* Is it worth contacting the developer?
+* What are the risks?
+* What genre does it resemble?
+* Could this become the next successful Roblox game?
+
+---
+
+## One improvement I'd make now
+
+I also recommend adding a `config.py` file that contains **all** configurable values instead of scattering them throughout the project:
+
+```python
+DISCORD_TOKEN
+GEMINI_API_KEY
+ALERT_CHANNEL_ID
+
+SCAN_INTERVAL = 15
+
+MIN_PLAYERS = 100
+MIN_GROWTH = 20
+MAX_VISITS = 10_000_000
+```
+
+That way, changing the scan interval or filters later is just editing one file instead of hunting through the code.
+
+At this point, your project is moving beyond a simple Discord bot and into an automated scouting platform. The next goal is to get **automatic alerts posting into `#alerts` reliably**, and then we'll focus on making those alerts much smarter.
