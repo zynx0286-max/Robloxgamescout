@@ -12,7 +12,7 @@ ROBLOX_API_BASE = "https://games.roblox.com/v1"
 ROBLOX_THUMBNAILS_API = "https://thumbnails.roblox.com/v1"
 
 # Database
-DATABASE_PATH = os.getenv("DATABASE_PATH", "scout_bot.db")
+DATABASE_PATH = os.getenv("DATABASE_PATH", "scoutbot.db")
 
 # Scout settings
 MAX_RESULTS = int(os.getenv("MAX_RESULTS", "5"))        # Max games returned per search

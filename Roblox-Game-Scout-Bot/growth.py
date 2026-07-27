@@ -1,6 +1,8 @@
 import sqlite3
 
-DATABASE = "scoutbot.db"
+from config import DATABASE_PATH
+
+DATABASE = DATABASE_PATH
 
 
 def get_growth(game_id):

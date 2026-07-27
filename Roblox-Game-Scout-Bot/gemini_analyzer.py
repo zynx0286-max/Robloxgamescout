@@ -12,8 +12,9 @@ import sqlite3
 import time
 import requests
 
+from config import DATABASE_PATH
 
-DATABASE = "scoutbot.db"
+DATABASE = DATABASE_PATH
 CACHE_TTL_SECONDS = 86400  # 24h
 GEMINI_API_KEY_ENV = "GEMINI_API_KEY"
 GEMINI_DAILY_LIMIT_ENV = "GEMINI_DAILY_LIMIT"

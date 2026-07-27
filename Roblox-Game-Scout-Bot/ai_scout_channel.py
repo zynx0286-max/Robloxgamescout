@@ -38,7 +38,9 @@ from gemini_analyzer import analyze_game, answer_question, format_report
 
 logger = logging.getLogger("ai_scout_channel")
 
-DATABASE = "scoutbot.db"
+from config import DATABASE_PATH
+
+DATABASE = DATABASE_PATH
 AI_CHANNEL_ID_ENV = "AI_CHANNEL_ID"
 AI_SCOUT_ID_ENV = "AI_SCOUT_ID"  # legacy alias from initial secret add.
 HISTORY_CAP = 12  # store last 12 turns (6 user + 6 assistant)

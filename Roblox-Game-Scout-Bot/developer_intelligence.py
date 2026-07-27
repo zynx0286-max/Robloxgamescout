@@ -12,8 +12,9 @@ import time
 import sqlite3
 import requests
 
+from config import DATABASE_PATH
 
-DATABASE = "scoutbot.db"
+DATABASE = DATABASE_PATH
 DEV_CACHE_TTL_SECONDS = 86400  # 24h
 DEV_LABEL = "👨\u200d💻 Developer history"
 

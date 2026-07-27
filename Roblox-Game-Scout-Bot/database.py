@@ -1,6 +1,7 @@
 import sqlite3
+from config import DATABASE_PATH
 
-DATABASE = "scoutbot.db"
+DATABASE = DATABASE_PATH
 
 
 def _table_columns(cursor, table):

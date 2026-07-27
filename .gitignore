@@ -49,6 +49,7 @@ Thumbs.db
 .local/
 .replit
 .replitignore
+replit.md
 
 # Database files — do not commit
 *.db
