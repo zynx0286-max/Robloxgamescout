@@ -1,3 +1,5 @@
+import asyncio
+
 import discord
 from discord import app_commands
 from database import (
@@ -13,7 +15,9 @@ from database import (
     is_user_watching,
 )
 from roblox_api import get_game_info
-from scanner import calculate_score, scan_games
+from scanner import calculate_score, scan_games, calculate_scout_score
+from growth import get_growth
+from trend import calculate_trend_score
 from categories import get_category
 from embeds import create_game_embed
 from buttons import GameButtons, AlertButtons
@@ -319,6 +323,56 @@ Max Game Age: {f['max_age']} days
         await interaction.response.defer(thinking=True)
         analysis = analyze_game(sample_game, force_refresh=False)
         report = format_report(sample_game["name"], analysis)
+        await interaction.followup.send(report)
+
+    @tree.command(
+        name="analyze",
+        description="Run a Gemini AI analyst on a specific Roblox game by universe ID",
+    )
+    @app_commands.describe(
+        place_id="Roblox game Universe ID, e.g. 994732206 for Blox Fruits",
+        force_refresh="Bypass the 24-hour cache and re-call Gemini",
+    )
+    async def analyze(
+        interaction: discord.Interaction,
+        place_id: str,
+        force_refresh: bool = False,
+    ):
+        await interaction.response.defer(thinking=True)
+
+        try:
+            numeric_id = int(place_id)
+        except ValueError:
+            await interaction.followup.send(
+                "❌ Game ID must be a number, e.g. `994732206` for Blox Fruits."
+            )
+            return
+
+        # Roblox HTTPS in a worker thread — keep the asyncio loop responsive.
+        try:
+            info = await asyncio.to_thread(get_game_info, str(numeric_id))
+        except Exception as exc:
+            await interaction.followup.send(
+                f"⚠️ Failed to fetch game info: `{exc}`"
+            )
+            return
+
+        if info is None:
+            await interaction.followup.send(
+                f"❌ Could not find a Roblox game with Universe ID `{numeric_id}`."
+            )
+            return
+
+        # Assemble everything Gemini needs in one shape:
+        #   • growth %, scout score breakdown, trend score, developer component.
+        growth = get_growth(info["id"])
+        info["growth"] = growth
+        info["scout_score"] = calculate_scout_score(info)
+        info["trend_score"] = calculate_trend_score(info, growth)
+
+        # analyze_game handles cache, quota gate, and fallback internally.
+        analysis = analyze_game(info, force_refresh=force_refresh)
+        report = format_report(info["name"], analysis)
         await interaction.followup.send(report)
 
     @tree.command(

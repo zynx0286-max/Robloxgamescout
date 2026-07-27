@@ -1,0 +1,222 @@
+This is a big milestone. Your **core system is now complete enough to start adding intelligence**.
+
+Before Gemini, do the verification Replit listed. Don't skip it because this is the foundation that everything else depends on.
+
+## Quick verification checklist
+
+### 1. Test Discord responsiveness
+
+Run:
+
+```text
+/hello
+```
+
+Expected:
+
+* Instant response
+* No "Application did not respond"
+
+Then:
+
+```text
+/scan
+```
+
+Expected:
+
+* Response in a few seconds
+* Scout Score appears
+* No freezing
+
+---
+
+### 2. Verify scheduler is actually running
+
+Watch your Replit console after 15 minutes.
+
+You should see something like:
+
+```text
+Starting scheduled scan...
+
+Found X games
+
+Tracker checking watched games...
+
+Completed successfully
+```
+
+If nothing appears, the scheduler may be running silently (which is fine), but I would add logging later.
+
+---
+
+### 3. Test the tracker
+
+Make sure you still have a watched game.
+
+Discord:
+
+```text
+/watched
+```
+
+If empty:
+
+1. Run `/scan`
+2. Click 👀 Watch on a game
+
+Then the tracker has something to monitor.
+
+---
+
+# If those pass → Build Gemini AI Analyst
+
+Now your bot has enough data to make AI useful.
+
+The first Gemini feature should be:
+
+## `/analyze`
+
+Example:
+
+```text
+/analyze 994732206
+```
+
+The bot should:
+
+1. Fetch game information
+2. Calculate Scout Score
+3. Get Developer Intelligence
+4. Send everything to Gemini
+5. Return a report
+
+---
+
+The output should look like:
+
+```
+🤖 AI Scout Analysis
+
+Game:
+Blox Fruits
+
+Verdict:
+🟡 Established Game
+
+Scout Score:
+72/100
+
+Analysis:
+
+Strengths:
+✅ Extremely strong player base
+✅ Proven developer history
+✅ High retention potential
+
+Weaknesses:
+⚠️ Already mature
+⚠️ Difficult for acquisition
+⚠️ Heavy competition
+
+Recommendation:
+Do not treat as an early opportunity.
+Use as a market benchmark.
+```
+
+---
+
+## Important: Don't connect Gemini to automatic scans yet
+
+Your future flow should be:
+
+```
+100 games found
+        ↓
+Filters
+        ↓
+5 games pass
+        ↓
+Scout Score ranks them
+        ↓
+Top games only
+        ↓
+Gemini analysis
+```
+
+Not:
+
+```
+100 games
+ ↓
+100 Gemini requests
+```
+
+That wastes API usage.
+
+---
+
+## Replit prompt for the next step
+
+Give it this:
+
+```
+Build Gemini AI Analyst v1.
+
+Requirements:
+
+- Create gemini_analyzer.py.
+- Add /analyze <game_id> slash command.
+- Use GEMINI_API_KEY from environment variables.
+- Gather:
+  - game statistics
+  - Scout Score breakdown
+  - Developer Intelligence data
+  - growth information if available.
+
+Gemini should return:
+- verdict
+- confidence score
+- strengths
+- risks
+- recommendation
+
+Add SQLite caching for AI responses for 24 hours.
+
+Add /testai using sample data.
+
+Do not automatically call Gemini during scanner alerts yet.
+Do not modify existing filters, scheduler, tracker, or buttons.
+```
+
+---
+
+After this, your bot's feature map will be:
+
+```
+Discovery
+✅ Roblox API
+✅ RoTrends
+✅ Filters
+
+Analysis
+✅ Scout Score
+✅ Developer Intelligence
+⬜ Gemini Analyst
+
+Monitoring
+✅ Watch system
+✅ Growth alerts
+✅ Scheduler
+
+Assistant
+⬜ Personal AI channel
+```
+
+The next two additions after Gemini will be:
+
+1. **Personal AI channel (`#ai-scout`)**
+2. **Deployment on Render**
+
+You are now at the point where the bot has a real product identity instead of just being a collection of commands.
