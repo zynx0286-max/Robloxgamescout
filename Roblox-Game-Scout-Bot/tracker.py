@@ -64,7 +64,7 @@ async def run_tracker(bot):
         date_added,
     ) in watched:
         try:
-            current = get_game_info(game_id)
+            current = await asyncio.to_thread(get_game_info, game_id)
         except Exception as exc:
             error_count += 1
             logger.warning("Tracker fetch failed for %s: %s", game_name, exc)

@@ -46,7 +46,7 @@ async def _run_scan_once(bot):
     alerts = 0
 
     try:
-        results = scan_games()
+        results = await asyncio.to_thread(scan_games)
         scan_count = len(results)
         matched = len(results)
         save_alert_log("scan_complete", f"Scan completed: {scan_count} games")

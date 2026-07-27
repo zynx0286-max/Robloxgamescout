@@ -43,11 +43,7 @@ bot = MyBot()
 @bot.event
 async def on_ready():
     print(f"Logged in as {bot.user}")
-    # TEMP: scheduler disabled while we fix roblox_api sync HTTP blocking the
-    # asyncio event loop. Re-enable by uncommenting start_scheduler(bot) below
-    # once get_game_info is migrated to aiohttp.
-    # start_scheduler(bot)
-    print("Scheduler disabled — interaction handlers respond normally.")
+    start_scheduler(bot)
 
 async def _shutdown():
     stop_scheduler()
