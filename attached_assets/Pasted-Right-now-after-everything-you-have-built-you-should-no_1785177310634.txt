@@ -1,0 +1,343 @@
+Right now, after everything you have built, you should **not immediately build everything I listed**. You are at the point where you need to turn the existing system into a clean product.
+
+Here is what should currently be possible, and what you should do next.
+
+---
+
+# Current Status (What Your Bot Should Already Do)
+
+## ✅ 1. Find Roblox opportunities
+
+You should already have:
+
+```
+/scan
+```
+
+It should:
+
+* Pull Roblox games
+* Check your filters
+* Rank them
+* Show Scout Score
+
+Example:
+
+```
+🚨 New Opportunity
+
+Game:
+Example Simulator
+
+⭐ Scout Score: 87/100
+
+Breakdown:
+📈 Growth +25
+👥 Momentum +25
+🆕 New Release +10
+❤️ Like Ratio +7
+👨‍💻 Developer +20
+```
+
+---
+
+## ✅ 2. Smart Filters
+
+You should be able to customize:
+
+```
+/settings
+```
+
+Things like:
+
+* Minimum players
+* Maximum players
+* Minimum visits
+* Maximum visits
+* Growth
+* Genre
+* Age
+
+---
+
+## ✅ 3. Save / Watch / Ignore
+
+Your buttons should now work:
+
+### 💾 Save
+
+Stores a game.
+
+Purpose:
+
+> "I want to look at this later."
+
+---
+
+### 👀 Watch
+
+Tracks a game.
+
+Purpose:
+
+> "Tell me if this game starts exploding."
+
+---
+
+### ❌ Ignore
+
+Blocks it.
+
+Purpose:
+
+> "Don't show me this again."
+
+---
+
+## ✅ 4. Automatic Monitoring
+
+The bot should already:
+
+Every 15 minutes:
+
+```
+Check watched games
+        ↓
+Compare old stats
+        ↓
+Detect growth
+        ↓
+Send explosion alert
+```
+
+Example:
+
+```
+🚀 MAJOR EXPLOSION
+
+Game:
+Example Simulator
+
+Players:
+500 → 900
+
+Growth:
++80%
+```
+
+---
+
+# What You Should Build Next
+
+## Phase 1: Gemini AI Analyst (Next)
+
+This is the next logical feature.
+
+Do NOT make Gemini search for games.
+
+Your bot should do:
+
+```
+Roblox Data
+     ↓
+Filters
+     ↓
+Scout Score
+     ↓
+Developer Intelligence
+     ↓
+Gemini Analysis
+```
+
+Gemini explains the decision.
+
+---
+
+## Your first Gemini version should only do one thing:
+
+Add a command:
+
+```
+/analyze <game_id>
+```
+
+Example:
+
+You type:
+
+```
+/analyze 994732206
+```
+
+Bot:
+
+```
+🤖 AI Analysis
+
+Game:
+Blox Fruits
+
+Verdict:
+Already established
+
+Strengths:
+✅ Massive player base
+✅ Strong developer history
+
+Risks:
+⚠️ Not an early opportunity
+⚠️ Very competitive
+
+Recommendation:
+Do not acquire. Monitor only.
+```
+
+---
+
+# Do NOT build yet:
+
+Avoid these for now:
+
+❌ Dashboard
+❌ Website
+❌ Mobile app
+❌ Complex AI chat
+❌ Payments
+❌ Marketplace
+
+Those are distractions.
+
+---
+
+# After Gemini works, build your personal AI channel
+
+Then add:
+
+```
+#ai-scout
+```
+
+You:
+
+```
+@Roblox Game Scout
+
+Analyze this game:
+123456
+```
+
+Bot:
+
+```
+Running analysis...
+
+✓ Roblox data
+✓ Scout Score
+✓ Developer history
+✓ Gemini reasoning
+
+Report:
+...
+```
+
+---
+
+# Your exact next 5 steps
+
+## Step 1 (Now)
+
+Build:
+
+```
+/analyze game_id
+```
+
+using Gemini.
+
+---
+
+## Step 2
+
+Add AI analysis button:
+
+Current:
+
+```
+💾 Save
+👀 Watch
+❌ Ignore
+```
+
+Change to:
+
+```
+💾 Save
+👀 Watch
+🤖 AI Analyze
+❌ Ignore
+```
+
+---
+
+## Step 3
+
+Create AI cache.
+
+Reason:
+
+You don't want:
+
+```
+/scan
+100 games
+=
+100 Gemini requests
+```
+
+Instead:
+
+```
+First request:
+Gemini
+
+Next 24 hours:
+Use saved answer
+```
+
+---
+
+## Step 4
+
+Create the private AI channel.
+
+---
+
+## Step 5
+
+Improve Scout Score.
+
+Eventually:
+
+```
+Scout Score: 87/100
+
+AI Confidence:
+82%
+
+Investment Risk:
+Medium
+
+Recommendation:
+Watch for 14 days
+```
+
+---
+
+So your immediate action:
+
+Send Replit the Gemini prompt from before, but change the first goal to:
+
+> "Build `/analyze <game_id>` first. Do not automatically analyze every scanned game yet."
+
+That gives you a working AI feature without wasting API calls.
