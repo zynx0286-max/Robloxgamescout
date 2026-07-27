@@ -5,6 +5,7 @@ from dotenv import load_dotenv
 from database import create_database
 from commands import setup_commands
 from scheduler import start_scheduler, stop_scheduler
+from ai_scout_channel import handle_ai_scout_message
 
 load_dotenv()
 
@@ -14,6 +15,9 @@ GUILD_ID = os.getenv("GUILD_ID")
 class MyBot(discord.Client):
     def __init__(self):
         intents = discord.Intents.default()
+        # Required so on_message can read message.content in the #ai-scout
+        # private channel. The handler is also gated by channel id.
+        intents.message_content = True
         super().__init__(intents=intents)
         self.tree = app_commands.CommandTree(self)
 
@@ -39,6 +43,20 @@ class MyBot(discord.Client):
             print("Slash commands synced globally")
 
 bot = MyBot()
+
+
+@bot.event
+async def on_message(message):
+    """Reply to messages posted in the configured #ai-scout channel."""
+    # bot.user not set during pre-ready; defer to handler which early-exits.
+    if bot.user is not None and message.author == bot.user:
+        return
+    reply = await handle_ai_scout_message(message)
+    if not reply:
+        return
+    async with message.channel.typing():
+        await message.channel.send(reply)
+
 
 @bot.event
 async def on_ready():
