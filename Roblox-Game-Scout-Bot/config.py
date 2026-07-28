@@ -1,5 +1,11 @@
 import os
-from dotenv import load_dotenv
+
+try:
+    from dotenv import load_dotenv
+except ModuleNotFoundError:  # pragma: no cover - optional dependency in some environments
+    def load_dotenv():
+        return False
+
 
 load_dotenv()
 
@@ -25,9 +31,9 @@ SCAN_INTERVAL = int(os.getenv("SCAN_INTERVAL", "15"))   # automated scan interva
 ALERT_CHANNEL_ID = int(os.getenv("ALERT_CHANNEL_ID", "0"))
 
 # Default alert filters (used when no per-user settings apply)
-ALERT_MIN_PLAYERS = int(os.getenv("ALERT_MIN_PLAYERS", "100"))
-ALERT_MIN_GROWTH = float(os.getenv("ALERT_MIN_GROWTH", "20"))
-ALERT_MAX_VISITS = int(os.getenv("ALERT_MAX_VISITS", "10000000"))
+ALERT_MIN_PLAYERS = int(os.getenv("ALERT_MIN_PLAYERS", "15"))
+ALERT_MIN_GROWTH = float(os.getenv("ALERT_MIN_GROWTH", "0"))
+ALERT_MAX_VISITS = int(os.getenv("ALERT_MAX_VISITS", "1500000"))
 
 # ---- Discovery Engine Settings ----
 

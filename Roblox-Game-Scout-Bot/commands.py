@@ -233,11 +233,11 @@ Max Game Age:
         description="Change your scout filters (any field can be omitted)",
     )
     @app_commands.describe(
-        min_visits="Minimum number of visits a game must have",
-        max_visits="Maximum visits (0 = no cap)",
-        min_players="Minimum number of active players",
-        max_players="Maximum players (0 = no cap)",
-        min_growth="Minimum growth percentage (e.g. 30)",
+        min_visits="Minimum visits (default 0)",
+        max_visits="Maximum visits before filtering out (default 1,500,000)",
+        min_players="Minimum current CCU (default 15)",
+        max_players="Maximum current CCU (default 2,500)",
+        min_growth="Minimum growth percentage (default 0)",
         genre="Genre keyword to filter by (Simulator, RPG, Tycoon, Any…)",
         max_age="Maximum age in days (only enforced if timestamp is known)",
         alert_level="How loud alerts are. Quiet low alerts aren't mentioned.",
@@ -463,13 +463,15 @@ Max Game Age: {f['max_age']} days
 🔎 Scanning Roblox Games...
 
 Filters:
-Players: {user_settings['minimum_players']:,}+ (max {user_settings['maximum_players']:,})
-Visits: {user_settings['minimum_visits']:,}+ (max {user_settings['maximum_visits']:,})
+CCU: {user_settings['minimum_players']:,} to {user_settings['maximum_players']:,}
+Visits: below {user_settings['maximum_visits']:,}
+Rating: 75%+ required
+Links: Roblox URL + RoTrends + Discord required
 Growth: {user_settings['minimum_growth']}%
 Genre: {user_settings['genre']}
 Max Age: {user_settings['max_age']} days
 
-Please wait while I find the best opportunities...
+Please wait while I find the best acquisition opportunities...
 """
         )
 

@@ -16,10 +16,10 @@ def _recreate_users_table(cursor):
     cursor.execute("""
     CREATE TABLE users (
         discord_id INTEGER PRIMARY KEY,
-        minimum_visits INTEGER DEFAULT 100000,
-        maximum_visits INTEGER DEFAULT 0,
-        minimum_players INTEGER DEFAULT 100,
-        maximum_players INTEGER DEFAULT 0,
+        minimum_visits INTEGER DEFAULT 0,
+        maximum_visits INTEGER DEFAULT 1500000,
+        minimum_players INTEGER DEFAULT 15,
+        maximum_players INTEGER DEFAULT 2500,
         minimum_growth INTEGER DEFAULT 0,
         genre TEXT DEFAULT 'Any',
         max_age INTEGER DEFAULT 365,
@@ -47,10 +47,10 @@ def create_database():
     cursor.execute("""
     CREATE TABLE IF NOT EXISTS users (
         discord_id INTEGER PRIMARY KEY,
-        minimum_visits INTEGER DEFAULT 100000,
-        maximum_visits INTEGER DEFAULT 0,
-        minimum_players INTEGER DEFAULT 100,
-        maximum_players INTEGER DEFAULT 0,
+        minimum_visits INTEGER DEFAULT 0,
+        maximum_visits INTEGER DEFAULT 1500000,
+        minimum_players INTEGER DEFAULT 15,
+        maximum_players INTEGER DEFAULT 2500,
         minimum_growth INTEGER DEFAULT 0,
         genre TEXT DEFAULT 'Any',
         max_age INTEGER DEFAULT 365,
@@ -272,10 +272,10 @@ def get_user_filters(discord_id):
 
     if row is None:
         return {
-            "minimum_visits": 100000,
-            "maximum_visits": 0,
-            "minimum_players": 100,
-            "maximum_players": 0,
+            "minimum_visits": 0,
+            "maximum_visits": 1_500_000,
+            "minimum_players": 15,
+            "maximum_players": 2500,
             "minimum_growth": 0,
             "genre": "Any",
             "max_age": 365,
