@@ -18,7 +18,7 @@ from roblox_api_async import fetch_game_details_batch
 from database import save_game_snapshot
 from growth import get_growth
 from trend import calculate_trend_score
-from filters import passes_filters
+from filters import passes_alert_filters, passes_filters
 from developer_intelligence import calculate_developer_score
 from velocity import compute_velocity, get_trending_score_from_velocity
 from config import MAX_CONCURRENT_FETCHES
@@ -65,6 +65,17 @@ def calculate_score(game):
         score += 15
 
     return score
+
+
+def _build_filter_diagnostics(game: dict, failures: list[str]) -> dict:
+    """Return per-game filter diagnostics without changing the existing filter logic."""
+    return {
+        "ccu_pass": not any(reason.startswith("CCU") for reason in failures),
+        "visits_pass": not any(reason.startswith("Visits") for reason in failures),
+        "rating_pass": not any(reason.startswith("Rating") for reason in failures),
+        "discord_present": bool(game.get("discord_invite")),
+        "rotrends_present": bool(game.get("rotrends_url")),
+    }
 
 
 def _new_release_points(game):
@@ -303,7 +314,8 @@ async def scan_games_async(
     user_settings: Optional[dict] = None,
     is_deep_scan: bool = False,
     seed_ids: Optional[list[int]] = None,
-) -> list[dict]:
+    return_diagnostics: bool = False,
+):
     """
     Async version of scan_games with concurrent batch fetching.
 
@@ -340,6 +352,15 @@ async def scan_games_async(
 
     # Step 3: Process each game (growth, trend, velocity, filtering)
     found_games = []
+    diagnostics = {
+        "total_collected": len(enriched),
+        "ccu_passes": 0,
+        "visits_passes": 0,
+        "rating_passes": 0,
+        "discord_present": 0,
+        "rotrends_present": 0,
+        "final_matches": 0,
+    }
     for info in enriched:
         try:
             # Save snapshot to history
@@ -357,9 +378,26 @@ async def scan_games_async(
             except Exception:
                 info["velocity"] = {}
 
+            passed, failures = passes_alert_filters(info)
+            filter_diagnostics = _build_filter_diagnostics(info, failures)
+            if filter_diagnostics["ccu_pass"]:
+                diagnostics["ccu_passes"] += 1
+            if filter_diagnostics["visits_pass"]:
+                diagnostics["visits_passes"] += 1
+            if filter_diagnostics["rating_pass"]:
+                diagnostics["rating_passes"] += 1
+            if filter_diagnostics["discord_present"]:
+                diagnostics["discord_present"] += 1
+            if filter_diagnostics["rotrends_present"]:
+                diagnostics["rotrends_present"] += 1
+
             # Apply user filters
             if passes_filters(info, user_settings):
                 found_games.append(info)
+            else:
+                reason_text = " | ".join(failures) if failures else "unknown filter failure"
+                _log(f"rejected game {info.get('id')} ({info.get('name')}): {reason_text}")
+                logger.info("SCAN REJECTED: %s — %s", info.get("name", info.get("id")), reason_text)
         except Exception as exc:
             _log(f"error processing game {info.get('id')}: {exc}")
             continue
@@ -367,5 +405,8 @@ async def scan_games_async(
     # Step 4: Rank by Scout Score
     _log(f"found {len(found_games)} games before ranking")
     ranked = await rank_games(found_games)
+    diagnostics["final_matches"] = len(ranked)
     _log(f"returning {len(ranked)} ranked games")
+    if return_diagnostics:
+        return ranked, diagnostics
     return ranked

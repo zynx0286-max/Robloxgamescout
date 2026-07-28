@@ -477,13 +477,39 @@ Please wait while I find the best acquisition opportunities...
 
         # Use async scanner to avoid blocking the event loop
         async with aiohttp.ClientSession() as session:
-            results = await scan_games_async(session=session, user_settings=user_settings)
+            results, diagnostics = await scan_games_async(
+                session=session,
+                user_settings=user_settings,
+                return_diagnostics=True,
+            )
 
         if not results:
             await interaction.followup.send(
                 "No games matched your filters. Try lowering them with `/settings`."
             )
+            await interaction.followup.send(
+                "📊 Scan diagnostics\n"
+                f"Total games collected: {diagnostics['total_collected']}\n"
+                f"Games passing CCU filter: {diagnostics['ccu_passes']}\n"
+                f"Games passing visits filter: {diagnostics['visits_passes']}\n"
+                f"Games passing rating filter: {diagnostics['rating_passes']}\n"
+                f"Games with Discord: {diagnostics['discord_present']}\n"
+                f"Games with RoTrends: {diagnostics['rotrends_present']}\n"
+                f"Final matches: {diagnostics['final_matches']}"
+            )
             return
+
+        summary_message = (
+            "📊 Scan diagnostics\n"
+            f"Total games collected: {diagnostics['total_collected']}\n"
+            f"Games passing CCU filter: {diagnostics['ccu_passes']}\n"
+            f"Games passing visits filter: {diagnostics['visits_passes']}\n"
+            f"Games passing rating filter: {diagnostics['rating_passes']}\n"
+            f"Games with Discord: {diagnostics['discord_present']}\n"
+            f"Games with RoTrends: {diagnostics['rotrends_present']}\n"
+            f"Final matches: {diagnostics['final_matches']}"
+        )
+        await interaction.followup.send(summary_message)
 
         # Send the top result as a professional embed with buttons
         top_game = results[0]
