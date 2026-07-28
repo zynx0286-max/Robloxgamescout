@@ -1,12 +1,29 @@
+"""
+Scanner system for Roblox Game Scout.
+
+Coordinates game discovery, detail fetching, scoring, filtering, and ranking.
+Supports both legacy sync and new async+concurrent modes.
+"""
+
+import asyncio
+import logging
 import time
-from data_collector import collect_games
+from typing import Optional
+
+import aiohttp
+
+from data_collector import collect_games, collect_games_async
 from roblox_api import get_game_info
+from roblox_api_async import fetch_game_details_batch
 from database import save_game_snapshot
 from growth import get_growth
 from trend import calculate_trend_score
 from filters import passes_filters
 from developer_intelligence import calculate_developer_score
+from velocity import compute_velocity, get_trending_score_from_velocity
+from config import MAX_CONCURRENT_FETCHES
 
+logger = logging.getLogger("scanner")
 
 DEBUG_LOG = "scan_debug.log"
 
@@ -140,6 +157,15 @@ def calculate_scout_score(game):
         like_pts, like_text = 0, "❤️ Favorites not yet tracked"
     breakdown.append(("❤️ Like ratio", like_pts, like_text))
 
+    # 🚀 Velocity / Trending (0-20 — NEW)
+    velocity = game.get("velocity", {})
+    if velocity and velocity.get("snapshot_count", 0) >= 3:
+        trend_pts = get_trending_score_from_velocity(velocity)
+        trend_text = f"🚀 {velocity.get('ccu_trend', 'stable').title()} momentum"
+        breakdown.append(("🚀 Velocity", trend_pts, trend_text))
+    else:
+        breakdown.append(("🚀 Velocity", 0, "📊 Insufficient history"))
+
     # 👨‍💻 Developer history (0-20 reserve — currently 0 until we add metrics)
     dev_pts, dev_label, dev_text = _developer_history_points(game)
     breakdown.append((dev_label, dev_pts, dev_text))
@@ -175,6 +201,40 @@ def rank_games(games):
     return games
 
 
+async def _fetch_game_details_async(
+    session: aiohttp.ClientSession,
+    game_stubs: list[dict],
+) -> list[dict]:
+    """
+    Fetch game details for multiple game stubs using batch API calls.
+
+    This is the async counterpart to the sequential get_game_info loop.
+    """
+    if not game_stubs:
+        return []
+
+    # Collect all universe IDs
+    universe_ids = [g["id"] for g in game_stubs]
+
+    # Batch fetch game info
+    batch_results = await fetch_game_details_batch(session, universe_ids)
+
+    # Merge results back with stubs
+    enriched = []
+    for stub, details in zip(game_stubs, batch_results):
+        if details is None:
+            # Try synchronous fallback
+            info = get_game_info(stub["id"])
+            if info is None:
+                continue
+            details = info
+
+        details["source"] = stub.get("source", "Unknown")
+        enriched.append(details)
+
+    return enriched
+
+
 def scan_games(user_settings=None):
     """Scan games from all sources, filter, save snapshots, and rank."""
     _log("scan_games started")
@@ -190,8 +250,9 @@ def scan_games(user_settings=None):
 
     found_games = []
 
+    # Collect game stubs from all sources (now returns 150-500+ games)
     games = collect_games()
-    _log(f"collected {len(games)} games: {games}")
+    _log(f"collected {len(games)} game stubs")
 
     for game in games:
         _log(f"processing game id={game.get('id')}")
@@ -210,6 +271,14 @@ def scan_games(user_settings=None):
         info["trend_score"] = calculate_trend_score(info, growth)
         _log(f"growth={growth}, trend_score={info['trend_score']}")
 
+        # Compute velocity metrics from historical data
+        try:
+            velocity = compute_velocity(info["id"])
+            info["velocity"] = velocity
+        except Exception as exc:
+            _log(f"velocity computation failed: {exc}")
+            info["velocity"] = {}
+
         if passes_filters(info, user_settings):
             _log(f"passes filters, adding {info['name']}")
             found_games.append(info)
@@ -219,6 +288,79 @@ def scan_games(user_settings=None):
                 f"players={info['playing']}, growth={info['growth']}"
             )
 
+    _log(f"found {len(found_games)} games before ranking")
+    ranked = rank_games(found_games)
+    _log(f"returning {len(ranked)} ranked games")
+    return ranked
+
+
+async def scan_games_async(
+    session: aiohttp.ClientSession,
+    user_settings: Optional[dict] = None,
+    is_deep_scan: bool = False,
+    seed_ids: Optional[list[int]] = None,
+) -> list[dict]:
+    """
+    Async version of scan_games with concurrent batch fetching.
+
+    This is the new high-performance scan pipeline. It:
+      1. Collects game stubs from all sources concurrently
+      2. Fetches game details in batches (up to 100 IDs per request)
+      3. Computes growth, trend, and velocity for each game
+      4. Filters and ranks results
+    """
+    _log("scan_games_async started")
+
+    if user_settings is None:
+        user_settings = {
+            "minimum_visits": 0,
+            "minimum_players": 0,
+            "minimum_growth": 0,
+        }
+
+    # Step 1: Collect game stubs from all sources (150-500+ games)
+    game_stubs = await collect_games_async(
+        session,
+        seed_ids=seed_ids,
+        is_deep_scan=is_deep_scan,
+    )
+    _log(f"collected {len(game_stubs)} game stubs")
+
+    if not game_stubs:
+        _log("no games collected, returning empty")
+        return []
+
+    # Step 2: Fetch game details in batches
+    enriched = await _fetch_game_details_async(session, game_stubs)
+    _log(f"enriched {len(enriched)} games")
+
+    # Step 3: Process each game (growth, trend, velocity, filtering)
+    found_games = []
+    for info in enriched:
+        try:
+            # Save snapshot to history
+            save_game_snapshot(info)
+
+            # Compute growth from last two snapshots
+            growth = get_growth(info["id"])
+            info["growth"] = growth
+            info["trend_score"] = calculate_trend_score(info, growth)
+
+            # Compute velocity from historical data
+            try:
+                velocity = compute_velocity(info["id"])
+                info["velocity"] = velocity
+            except Exception:
+                info["velocity"] = {}
+
+            # Apply user filters
+            if passes_filters(info, user_settings):
+                found_games.append(info)
+        except Exception as exc:
+            _log(f"error processing game {info.get('id')}: {exc}")
+            continue
+
+    # Step 4: Rank by Scout Score
     _log(f"found {len(found_games)} games before ranking")
     ranked = rank_games(found_games)
     _log(f"returning {len(ranked)} ranked games")

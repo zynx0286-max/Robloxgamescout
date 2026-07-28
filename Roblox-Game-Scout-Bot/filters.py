@@ -1,49 +1,129 @@
-def passes_filters(game, settings):
-    """Return True if a game meets the user's filter settings."""
-    if game["visits"] < settings.get("minimum_visits", 0):
-        return False
+"""
+Game Scout filtering system.
 
-    if game["playing"] < settings.get("minimum_players", 0):
-        return False
+A game can ONLY trigger an alert if ALL conditions pass.
+If ANY requirement fails, log the reason and do not alert.
+"""
 
-    # Only enforce a growth floor when the user actually set one above 0.
-    if settings.get("minimum_growth", 0) > 0 and game.get("growth", 0) < settings["minimum_growth"]:
-        return False
+import logging
+import re
+from typing import Optional
 
-    # Smart Filters: upper bounds. 0 (or missing) means no upper cap.
-    max_players = settings.get("maximum_players", 0)
-    if max_players and max_players > 0 and game["playing"] > max_players:
-        return False
+logger = logging.getLogger("filters")
 
-    max_visits = settings.get("maximum_visits", 0)
-    if max_visits and max_visits > 0 and game["visits"] > max_visits:
-        return False
+# Hard filter thresholds
+CCU_MIN = 15
+CCU_MAX = 2500
+VISITS_MAX = 1_500_000
+RATING_MIN_PERCENT = 75.0
 
-    # Genre filter: "Any" or empty means no filter. Otherwise require a
-    # case-insensitive keyword match in the game name (best-effort given
-    # Roblox Discovery doesn't expose a genre field).
-    genre = (settings.get("genre") or "Any").strip()
-    if genre and genre.lower() != "any":
-        needle = genre.lower()
-        if needle not in game.get("name", "").lower():
-            return False
 
-    # Game age: enforced only when the game carries a `created` or
-    # `first_seen` ISO timestamp. Otherwise pass.
-    max_age = settings.get("max_age", 0)
-    if max_age and max_age > 0:
-        iso = game.get("created") or game.get("first_seen")
-        if iso:
-            try:
-                from datetime import datetime, timezone
+def _check_ccu(game: dict) -> tuple[bool, str]:
+    """Check CCU (concurrent players) is between 15 and 2,500."""
+    playing = game.get("playing", 0)
+    if playing < CCU_MIN:
+        return False, f"CCU {playing} below minimum {CCU_MIN}"
+    if playing > CCU_MAX:
+        return False, f"CCU {playing} above maximum {CCU_MAX}"
+    return True, ""
 
-                stamp = datetime.fromisoformat(str(iso).replace("Z", "+00:00"))
-                if stamp.tzinfo is None:
-                    stamp = stamp.replace(tzinfo=timezone.utc)
-                age_days = (datetime.now(timezone.utc) - stamp).days
-                if age_days > max_age:
-                    return False
-            except Exception:
-                pass
 
-    return True
+def _check_visits(game: dict) -> tuple[bool, str]:
+    """Check total visits is below 1,500,000."""
+    visits = game.get("visits", 0)
+    if visits >= VISITS_MAX:
+        return False, f"Visits {visits:,} at or above limit {VISITS_MAX:,}"
+    return True, ""
+
+
+def _check_rating(game: dict) -> tuple[bool, str]:
+    """Check rating percentage is at least 75%."""
+    rating_pct = game.get("rating_percent", 0)
+    if rating_pct <= 0:
+        return False, "Rating data not available"
+    if rating_pct < RATING_MIN_PERCENT:
+        return False, f"Rating {rating_pct:.1f}% below minimum {RATING_MIN_PERCENT}%"
+    return True, ""
+
+
+def _check_discord(game: dict) -> tuple[bool, str]:
+    """Check the game has a valid Discord invite link found from Roblox sources."""
+    discord_invite = game.get("discord_invite", "")
+    if not discord_invite:
+        return False, "No Discord invite found via social links, description, or group"
+    # Basic validation — should look like a Discord invite
+    if not re.match(r'^(https?://)?(www\.)?(discord\.(gg|com/invite))/', discord_invite.strip()):
+        return False, f"Discord link '{discord_invite}' does not appear to be a valid invite URL"
+    return True, ""
+
+
+def _check_roblox_link(game: dict) -> tuple[bool, str]:
+    """Check the game generates a valid Roblox game URL."""
+    place_id = game.get("place_id") or game.get("id")
+    if not place_id:
+        return False, "No place_id or id available to build Roblox link"
+    # Store the generated link on the game dict for later use
+    game["roblox_url"] = f"https://www.roblox.com/games/{place_id}"
+    return True, ""
+
+
+def _check_rotrends_link(game: dict) -> tuple[bool, str]:
+    """Check the game generates a valid RoTrends URL."""
+    universe_id = game.get("id")
+    if not universe_id:
+        return False, "No universe id available to build RoTrends link"
+    # Store the generated link on the game dict for later use
+    game["rotrends_url"] = f"https://rotrends.com/game/{universe_id}"
+    return True, ""
+
+
+def passes_alert_filters(game: dict) -> tuple[bool, list[str]]:
+    """
+    Run ALL filter checks against a game.
+
+    Returns (passed: bool, failure_reasons: list[str]).
+    If passed is True, the game qualifies for an alert.
+    If passed is False, failure_reasons contains every reason it failed.
+    """
+    failures: list[str] = []
+
+    # 1. CCU check
+    ok, reason = _check_ccu(game)
+    if not ok:
+        failures.append(reason)
+
+    # 2. Visits check
+    ok, reason = _check_visits(game)
+    if not ok:
+        failures.append(reason)
+
+    # 3. Rating check
+    ok, reason = _check_rating(game)
+    if not ok:
+        failures.append(reason)
+
+    # 4. Discord invite check
+    ok, reason = _check_discord(game)
+    if not ok:
+        failures.append(reason)
+
+    # 5. Roblox game link check
+    ok, reason = _check_roblox_link(game)
+    if not ok:
+        failures.append(reason)
+
+    # 6. RoTrends link check
+    ok, reason = _check_rotrends_link(game)
+    if not ok:
+        failures.append(reason)
+
+    passed = len(failures) == 0
+    if not passed:
+        game_name = game.get("name", f"Game {game.get('id', '?')}")
+        logger.info(
+            "FILTER FAILED: %s — %s",
+            game_name,
+            " | ".join(failures),
+        )
+
+    return passed, failures

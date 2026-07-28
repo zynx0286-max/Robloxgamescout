@@ -1,9 +1,8 @@
-"""Gemini AI Analyst v1 — explain *why* a game opportunity matters.
+"""Gemini AI Analyst v2 — Acquisition-focused opportunity analysis.
 
-The analyst is intentionally read-on-demand, not a scan-time hook. Every
-call is cached in `ai_analysis_cache` for 24h so a burst of alerts or button
-presses can reuse the same answer. If `GEMINI_API_KEY` is unset (or Gemini
-itself fails), it returns a deterministic fallback so `/testai` still works.
+Analyzes *why* a game is a good acquisition opportunity.
+Called as part of the alert pipeline, not just on demand.
+Every call is cached in `ai_analysis_cache` for 24h.
 """
 
 import json
@@ -150,7 +149,7 @@ def _cache_put(game_id, payload):
 
 
 def build_prompt_input(game_data):
-    """Build a structured payload dict to send to Gemini."""
+    """Build a structured payload dict for acquisition analysis."""
     scout = game_data.get("scout_score") or {}
     breakdown = scout.get("breakdown") or []
     by_label = {label: pts for label, pts, _ in breakdown}
@@ -162,8 +161,11 @@ def build_prompt_input(game_data):
         "visits": game_data.get("visits", 0),
         "favorites": game_data.get("favorites", 0),
         "growth_pct": game_data.get("growth", 0),
+        "rating_percent": game_data.get("rating_percent", 0),
         "creator": game_data.get("creator", "Unknown"),
+        "genre": game_data.get("genre", "Unknown"),
         "source": game_data.get("source", "Unknown"),
+        "discord_invite": game_data.get("discord_invite", ""),
         "scout_score": scout.get("total", 0),
         "scout_verdict": scout.get("verdict", ""),
         "score_breakdown": {
@@ -171,27 +173,30 @@ def build_prompt_input(game_data):
             "momentum": by_label.get("👥 Player momentum", 0),
             "release": by_label.get("🆕 New release", 0),
             "likes": by_label.get("❤️ Like ratio", 0),
+            "velocity": by_label.get("🚀 Velocity", 0),
             "developer": by_label.get("👨\u200d💻 Developer history", 0),
         },
         "trend_score": game_data.get("trend_score", 0),
     }
 
 
-PROMPT_TEMPLATE = (
-    "You are a Roblox scouting analyst. Use the structured data below to "
-    "assess whether this Roblox game is worth monitoring for acquisition/"
-    "investment.\n\n"
+# Acquisition-focused prompt that explains why a game is a good opportunity
+ACQUISITION_PROMPT_TEMPLATE = (
+    "You are a Roblox game acquisition analyst. Your job is to assess "
+    "whether a Roblox game is worth acquiring or investing in.\n\n"
     "Game data:\n{game_data}\n\n"
     "Return ONLY valid JSON matching this exact schema:\n"
     "{{\n"
     '  "verdict": "' + VERDICT_WORTH + ' | ' + VERDICT_WAIT + ' | '
     + VERDICT_RISKY + ' | ' + VERDICT_AVOID + '",\n'
     '  "confidence": <integer 0-100>,\n'
-    '  "strengths": [ "<short bullet>", "<short bullet>" ],\n'
-    '  "risks": [ "<short bullet>", "<short bullet>" ],\n'
-    '  "recommendation": "<one or two sentence actionable advice>"\n'
+    '  "strengths": [ "<short bullet explaining why this is a good acquisition>", "<short bullet>" ],\n'
+    '  "risks": [ "<short bullet explaining acquisition risks>", "<short bullet>" ],\n'
+    '  "recommendation": "<one or two sentence actionable acquisition advice>"\n'
     "}}\n\n"
-    "No prose. No markdown. Only JSON."
+    "Focus on acquisition potential: audience size, growth trajectory, "
+    "engagement metrics, creator reputation, monetization potential, "
+    "and market fit. Be concise and data-driven. No prose. No markdown. Only JSON."
 )
 
 
@@ -231,21 +236,22 @@ def _fallback(game_data):
         "verdict": VERDICT_FALLBACK,
         "confidence": 0,
         "strengths": [
-            f"Scout Score = {score}/100 (Gemini key not configured).",
+            f"Scout Score = {score}/100 (AI analysis not enabled).",
+            f"{game_data.get('playing', 0):,} concurrent players.",
         ],
         "risks": [
-            "AI analysis not enabled. Set GEMINI_API_KEY in environment to enable.",
+            "AI analysis not enabled. Set GEMINI_API_KEY in environment to enable detailed acquisition assessment.",
         ],
         "recommendation": (
-            "Add GEMINI_API_KEY to Replit Secrets, restart the bot, "
-            "and rerun /testai for AI-powered context."
+            "Add GEMINI_API_KEY to environment, restart the bot, "
+            "and rerun for AI-powered acquisition context."
         ),
         "raw": "",
     }
 
 
 def _quota_blocked_result(game_data):
-    """Soft response when daily quota is exhausted — preserves cache."""
+    """Soft response when daily quota is exhausted."""
     score = (game_data.get("scout_score") or {}).get("total", 0)
     return {
         "verdict": VERDICT_QUOTA,
@@ -293,7 +299,7 @@ def _normalize(result):
 
 
 def analyze_game(game_data, force_refresh=False):
-    """Return a structured analysis for a game.
+    """Return a structured acquisition analysis for a game.
 
     Cached per-universe-id for 24h. Falls back gracefully when Gemini is
     unreachable. Always returns a dict with `verdict`, `confidence`,
@@ -328,7 +334,9 @@ def analyze_game(game_data, force_refresh=False):
         return _normalize(_quota_blocked_result(game_data))
 
     payload = build_prompt_input(game_data)
-    prompt = PROMPT_TEMPLATE.format(game_data=json.dumps(payload, indent=2))
+    prompt = ACQUISITION_PROMPT_TEMPLATE.format(
+        game_data=json.dumps(payload, indent=2)
+    )
     raw_result = _call_gemini(prompt)
 
     if raw_result is None:
@@ -336,15 +344,13 @@ def analyze_game(game_data, force_refresh=False):
     else:
         normalized = _normalize(raw_result)
         normalized["raw"] = json.dumps(raw_result)
-        # Only record successful hits to quota usage. Failed calls don't burn
-        # adapter-side quota and shouldn't be charged against the limit.
         record_gemini_call(game_id, normalized.get("verdict"))
 
     _cache_put(game_id, normalized)
     return normalized
 
 
-# ---- freeform assistant helpers -----------------------------------------
+# ---- freeform assistant helpers (unchanged) -----------------------------------------
 
 import hashlib
 
@@ -427,16 +433,7 @@ def _question_cache_valid(row, now_epoch):
 
 
 def answer_question(question, force_refresh=False, history=None):
-    """Send a freeform question to Gemini. Cached by question hash 24h.
-
-    The cache key is the lowercase latest user message; history is part of
-    the prompt but never part of the cache key, so identical user questions
-    yield identical cached answers regardless of conversation depth.
-
-    Returns the markdown answer as a string. Quota, key presence, and
-    runtime errors are surfaced as friendly Discord messages without
-    crashing the listener.
-    """
+    """Send a freeform question to Gemini. Cached by question hash 24h."""
     question = (question or "").strip()
     if not question:
         return "🤖 I'm listening — try `@Roblox Game Scout <game id>` or a question."
@@ -499,9 +496,6 @@ def answer_question(question, force_refresh=False, history=None):
     return answer
 
 
-# ---- /freeform assistant helpers ----------------------------------------
-
-
 def format_report(name, analysis):
     """Render a Discord-friendly markdown report from a structured analysis."""
     verdict = analysis.get("verdict", "Unknown")
@@ -514,11 +508,11 @@ def format_report(name, analysis):
     risks_text = "\n".join(f"⚠️ {r}" for r in risks) or "—"
 
     return (
-        f"🤖 **AI Analyst Report**\n\n"
+        f"🤖 **AI Acquisition Report**\n\n"
         f"**Game:** {name}\n\n"
         f"**Verdict:** {verdict}\n\n"
         f"**Confidence:** {confidence}%\n\n"
-        f"**Why this matters:**\n{strengths_text}\n\n"
-        f"**Risks:**\n{risks_text}\n\n"
+        f"**Why this is a good acquisition:**\n{strengths_text}\n\n"
+        f"**Risks to consider:**\n{risks_text}\n\n"
         f"**Recommendation:** {recommendation}"
     )
