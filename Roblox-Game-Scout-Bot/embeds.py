@@ -174,3 +174,82 @@ def create_alert_embed(game: dict, priority: str = None) -> discord.Embed:
     )
 
     return embed
+
+
+def create_game_embed(game: dict) -> discord.Embed:
+    """
+    Compatibility wrapper — delegates to create_alert_embed.
+
+    Used by commands.py /scan and other callers that expect
+    a function named create_game_embed.
+    """
+    return create_alert_embed(game)
+
+
+def create_tracker_embed(
+    game_name: str,
+    old_players: int,
+    new_players: int,
+    old_visits: int,
+    new_visits: int,
+    players_delta: float,
+    visits_delta: float,
+    tracked_since: str,
+) -> discord.Embed:
+    """
+    Build an embed for a tracked-game CCU/visits alert.
+
+    Used by commands.py /testtracker and the tracker module.
+    """
+    embed = discord.Embed(
+        title=f"📊 Tracker Alert: {game_name}",
+        description=(
+            f"**{game_name}** has seen a significant change in player activity."
+        ),
+        color=discord.Color.green(),
+        timestamp=discord.utils.utcnow(),
+    )
+
+    embed.add_field(
+        name="👥 Players (Before)",
+        value=f"{old_players:,}",
+        inline=True,
+    )
+    embed.add_field(
+        name="👥 Players (Now)",
+        value=f"{new_players:,}",
+        inline=True,
+    )
+    embed.add_field(
+        name="📈 Player Change",
+        value=f"{players_delta:+.1f}%",
+        inline=True,
+    )
+
+    embed.add_field(
+        name="👀 Visits (Before)",
+        value=f"{old_visits:,}",
+        inline=True,
+    )
+    embed.add_field(
+        name="👀 Visits (Now)",
+        value=f"{new_visits:,}",
+        inline=True,
+    )
+    embed.add_field(
+        name="📈 Visit Change",
+        value=f"{visits_delta:+.1f}%",
+        inline=True,
+    )
+
+    embed.add_field(
+        name="📅 Tracked Since",
+        value=tracked_since,
+        inline=False,
+    )
+
+    embed.set_footer(
+        text=f"Tracker Alert | {time.strftime('%Y-%m-%d %H:%M:%S UTC')}",
+    )
+
+    return embed

@@ -45,13 +45,15 @@ _PROMPT_ALERT_LEVEL = {
     SETTING_MEDIUM_PLUS: "Medium+",
     SETTING_HIGH_ONLY: "High Only",
 }
+import aiohttp
+
 from roblox_api import get_game_info
-from scanner import calculate_score, scan_games, calculate_scout_score
+from scanner import calculate_score, scan_games, scan_games_async, calculate_scout_score
 from growth import get_growth
 from trend import calculate_trend_score
 from categories import get_category
 from embeds import create_game_embed
-from buttons import GameButtons, AlertButtons
+from buttons import AlertButtons
 from gemini_analyzer import (
     analyze_game,
     format_report,
@@ -452,7 +454,14 @@ Max Game Age: {f['max_age']} days
         add_user(user_id)
         user_settings = get_user_filters(user_id)
 
-        await interaction.response.send_message(
+        await interaction.response.defer()
+
+        # Use async scanner to avoid blocking the event loop
+        async with aiohttp.ClientSession() as session:
+            results = await scan_games_async(session=session, user_settings=user_settings)
+
+        # Send initial status message
+        await interaction.followup.send(
             f"""
 🔎 Scan Complete
 
@@ -467,8 +476,6 @@ Scanning...
 """
         )
 
-        results = scan_games(user_settings)
-
         if not results:
             await interaction.followup.send(
                 "No games matched your filters. Try lowering them with `/settings`."
@@ -479,7 +486,7 @@ Scanning...
         top_game = results[0]
         await interaction.followup.send(
             embed=create_game_embed(top_game),
-            view=GameButtons(top_game)
+            view=AlertButtons.with_game(top_game)
         )
 
         # Send remaining results as text summaries
@@ -488,12 +495,18 @@ Scanning...
 
     @tree.command(name="trending", description="Show only high-trend games")
     async def trending(interaction: discord.Interaction):
-        await interaction.response.send_message(
+        await interaction.response.defer()
+
+        # Use async scanner to avoid blocking the event loop
+        async with aiohttp.ClientSession() as session:
+            results = await scan_games_async(session=session)
+        
+        trending_games = [g for g in results if g.get("trend_score", 0) > 80]
+
+        # Send initial status message
+        await interaction.followup.send(
             "🔥 Finding trending Roblox games..."
         )
-
-        results = scan_games()
-        trending_games = [g for g in results if g.get("trend_score", 0) > 80]
 
         if not trending_games:
             await interaction.followup.send(

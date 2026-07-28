@@ -127,3 +127,58 @@ def passes_alert_filters(game: dict) -> tuple[bool, list[str]]:
         )
 
     return passed, failures
+
+
+def passes_filters(game: dict, user_settings: dict = None) -> bool:
+    """
+    Legacy-compatible wrapper used by scanner.py.
+
+    Calls passes_alert_filters() for the hard filter checks, then
+    applies any user-defined minimum thresholds on visits, players, and growth.
+
+    Returns True only if all checks pass.
+    """
+    # 1. Require the hard alert filters to pass
+    passed, failures = passes_alert_filters(game)
+    if not passed:
+        game_name = game.get("name", f"Game {game.get('id', '?')}")
+        for reason in failures:
+            logger.info("FILTER FAILED: %s — %s", game_name, reason)
+        return False
+
+    # 2. Apply user-defined minimum thresholds (if provided)
+    if user_settings:
+        visits = game.get("visits", 0)
+        playing = game.get("playing", 0)
+        growth = game.get("growth", 0)
+
+        min_visits = user_settings.get("minimum_visits", 0)
+        min_players = user_settings.get("minimum_players", 0)
+        min_growth = user_settings.get("minimum_growth", 0)
+
+        if visits < min_visits:
+            logger.info(
+                "USER FILTER: %s — Visits %s below user minimum %s",
+                game.get("name", "?"),
+                visits,
+                min_visits,
+            )
+            return False
+        if playing < min_players:
+            logger.info(
+                "USER FILTER: %s — Players %s below user minimum %s",
+                game.get("name", "?"),
+                playing,
+                min_players,
+            )
+            return False
+        if growth < min_growth:
+            logger.info(
+                "USER FILTER: %s — Growth %s below user minimum %s",
+                game.get("name", "?"),
+                growth,
+                min_growth,
+            )
+            return False
+
+    return True
