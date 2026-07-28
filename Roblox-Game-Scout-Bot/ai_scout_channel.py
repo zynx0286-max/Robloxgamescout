@@ -162,7 +162,7 @@ async def _handle_analyze_path(universe_id):
 
     growth = get_growth(info["id"])
     info["growth"] = growth
-    info["scout_score"] = calculate_scout_score(info)
+    info["scout_score"] = await calculate_scout_score(info)
     info["trend_score"] = calculate_trend_score(info, growth)
 
     # analyze_game handles cache + quota gate + fallback internally.

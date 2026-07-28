@@ -420,7 +420,7 @@ Max Game Age: {f['max_age']} days
         #   • growth %, scout score breakdown, trend score, developer component.
         growth = get_growth(info["id"])
         info["growth"] = growth
-        info["scout_score"] = calculate_scout_score(info)
+        info["scout_score"] = await calculate_scout_score(info)
         info["trend_score"] = calculate_trend_score(info, growth)
 
         # analyze_game handles cache, quota gate, and fallback internally.
@@ -450,20 +450,17 @@ Max Game Age: {f['max_age']} days
 
     @tree.command(name="scan", description="Find trending Roblox games")
     async def scan(interaction: discord.Interaction):
+        # Defer FIRST to acknowledge the interaction within Discord's 3-second limit
+        await interaction.response.defer(thinking=True)
+
         user_id = interaction.user.id
         add_user(user_id)
         user_settings = get_user_filters(user_id)
 
-        await interaction.response.defer()
-
-        # Use async scanner to avoid blocking the event loop
-        async with aiohttp.ClientSession() as session:
-            results = await scan_games_async(session=session, user_settings=user_settings)
-
         # Send initial status message
         await interaction.followup.send(
             f"""
-🔎 Scan Complete
+🔎 Scanning Roblox Games...
 
 Filters:
 Players: {user_settings['minimum_players']:,}+ (max {user_settings['maximum_players']:,})
@@ -472,9 +469,13 @@ Growth: {user_settings['minimum_growth']}%
 Genre: {user_settings['genre']}
 Max Age: {user_settings['max_age']} days
 
-Scanning...
+Please wait while I find the best opportunities...
 """
         )
+
+        # Use async scanner to avoid blocking the event loop
+        async with aiohttp.ClientSession() as session:
+            results = await scan_games_async(session=session, user_settings=user_settings)
 
         if not results:
             await interaction.followup.send(
@@ -495,18 +496,19 @@ Scanning...
 
     @tree.command(name="trending", description="Show only high-trend games")
     async def trending(interaction: discord.Interaction):
-        await interaction.response.defer()
+        # Defer FIRST to acknowledge the interaction within Discord's 3-second limit
+        await interaction.response.defer(thinking=True)
+
+        # Send initial status message
+        await interaction.followup.send(
+            "🔥 Finding trending Roblox games..."
+        )
 
         # Use async scanner to avoid blocking the event loop
         async with aiohttp.ClientSession() as session:
             results = await scan_games_async(session=session)
         
         trending_games = [g for g in results if g.get("trend_score", 0) > 80]
-
-        # Send initial status message
-        await interaction.followup.send(
-            "🔥 Finding trending Roblox games..."
-        )
 
         if not trending_games:
             await interaction.followup.send(

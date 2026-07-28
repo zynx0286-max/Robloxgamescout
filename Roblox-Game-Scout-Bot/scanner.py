@@ -93,13 +93,13 @@ def _new_release_points(game):
     return 0, "🆕 New release", f"⏳ Mature game ({age_days}d)"
 
 
-def _developer_history_points(game):
+async def _developer_history_points(game):
     """Pull creator history from Roblox via developer_intelligence and score it."""
-    pts, label, reason = calculate_developer_score(game)
+    pts, label, reason = await calculate_developer_score(game)
     return pts, label, reason
 
 
-def calculate_scout_score(game):
+async def calculate_scout_score(game):
     """Scout Score 2.0 — composable breakdown summing to 0-100."""
     breakdown = []
 
@@ -167,7 +167,7 @@ def calculate_scout_score(game):
         breakdown.append(("🚀 Velocity", 0, "📊 Insufficient history"))
 
     # 👨‍💻 Developer history (0-20 reserve — currently 0 until we add metrics)
-    dev_pts, dev_label, dev_text = _developer_history_points(game)
+    dev_pts, dev_label, dev_text = await _developer_history_points(game)
     breakdown.append((dev_label, dev_pts, dev_text))
 
     total = sum(pts for _, pts, _ in breakdown)
@@ -187,11 +187,11 @@ def _score_verdict(total):
     return "⚪ Low signal"
 
 
-def rank_games(games):
+async def rank_games(games):
     """Attach both legacy score and Scout Score 2.0, then sort by Scout total."""
     for game in games:
         game["score"] = calculate_score(game)
-        game["scout_score"] = calculate_scout_score(game)
+        game["scout_score"] = await calculate_scout_score(game)
 
     games.sort(
         key=lambda x: x["scout_score"]["total"],
@@ -223,11 +223,15 @@ async def _fetch_game_details_async(
     enriched = []
     for stub, details in zip(game_stubs, batch_results):
         if details is None:
-            # Try synchronous fallback
-            info = get_game_info(stub["id"])
-            if info is None:
+            # Try async fallback
+            try:
+                info = await get_game_info(stub["id"])
+                if info is None:
+                    continue
+                details = info
+            except Exception as exc:
+                logger.warning(f"Async fallback failed for game {stub.get('id')}: {exc}")
                 continue
-            details = info
 
         details["source"] = stub.get("source", "Unknown")
         enriched.append(details)
@@ -362,6 +366,6 @@ async def scan_games_async(
 
     # Step 4: Rank by Scout Score
     _log(f"found {len(found_games)} games before ranking")
-    ranked = rank_games(found_games)
+    ranked = await rank_games(found_games)
     _log(f"returning {len(ranked)} ranked games")
     return ranked

@@ -10,7 +10,7 @@ The component has two halves, separated for testability:
 
 import time
 import sqlite3
-import requests
+import aiohttp
 
 from config import DATABASE_PATH
 
@@ -99,52 +99,58 @@ def _cache_put(creator_key, data):
     conn.close()
 
 
-def fetch_creator(universe_id):
+async def fetch_creator(universe_id):
     """Return (creator_id, creator_type, name) from multigame-details."""
     url = (
         "https://games.roblox.com/v1/games/multigame-details"
         f"?universeIds={universe_id}"
     )
     try:
-        r = requests.get(url, timeout=10)
-        if r.status_code == 200:
-            for g in r.json().get("data", []):
-                creator = g.get("creator", {})
-                if creator.get("id"):
-                    return (
-                        int(creator["id"]),
-                        creator.get("type", "User"),
-                        creator.get("name", ""),
-                    )
+        async with aiohttp.ClientSession() as session:
+            async with session.get(url, timeout=aiohttp.ClientTimeout(total=10)) as r:
+                if r.status == 200:
+                    data = await r.json()
+                    for g in data.get("data", []):
+                        creator = g.get("creator", {})
+                        if creator.get("id"):
+                            return (
+                                int(creator["id"]),
+                                creator.get("type", "User"),
+                                creator.get("name", ""),
+                            )
     except Exception:
         pass
     return None, None, None
 
 
-def fetch_group_size(group_id):
+async def fetch_group_size(group_id):
     """Return member count for a Roblox group, or 0 on failure."""
     try:
-        r = requests.get(
-            f"https://groups.roblox.com/v1/groups/{group_id}",
-            timeout=10,
-        )
-        if r.status_code == 200:
-            return int(r.json().get("memberCount", 0))
+        async with aiohttp.ClientSession() as session:
+            async with session.get(
+                f"https://groups.roblox.com/v1/groups/{group_id}",
+                timeout=aiohttp.ClientTimeout(total=10),
+            ) as r:
+                if r.status == 200:
+                    data = await r.json()
+                    return int(data.get("memberCount", 0))
     except Exception:
         pass
     return 0
 
 
-def fetch_user_past_games(user_id, limit=20):
+async def fetch_user_past_games(user_id, limit=20):
     """Return list of past Roblox games by a user."""
     try:
-        r = requests.get(
-            f"https://games.roblox.com/v2/users/{user_id}/games"
-            f"?sortOrder=Desc&limit={limit}",
-            timeout=10,
-        )
-        if r.status_code == 200:
-            return r.json().get("data", [])
+        async with aiohttp.ClientSession() as session:
+            async with session.get(
+                f"https://games.roblox.com/v2/users/{user_id}/games"
+                f"?sortOrder=Desc&limit={limit}",
+                timeout=aiohttp.ClientTimeout(total=10),
+            ) as r:
+                if r.status == 200:
+                    data = await r.json()
+                    return data.get("data", [])
     except Exception:
         pass
     return []
@@ -225,7 +231,7 @@ def _format_reason(creator_type, creator_name, member_count, games_total, games_
     return f"{text}: {', '.join(bits)}"
 
 
-def calculate_developer_score(game, force_refresh=False):
+async def calculate_developer_score(game, force_refresh=False):
     """Return (points, label, reason) for the Developer History component.
 
     Always returns regardless of network/SQLite state — on any failure it
@@ -247,7 +253,7 @@ def calculate_developer_score(game, force_refresh=False):
                 return score, label, reason
 
     # Live fetch
-    creator_id, creator_type, creator_name = fetch_creator(universe_id)
+    creator_id, creator_type, creator_name = await fetch_creator(universe_id)
     if creator_id is None:
         return 0, DEV_LABEL, "Creator data unavailable"
 
@@ -257,12 +263,12 @@ def calculate_developer_score(game, force_refresh=False):
     max_peak = 0
 
     if creator_type == "Group":
-        member_count = fetch_group_size(creator_id)
+        member_count = await fetch_group_size(creator_id)
         # Group creator catalog isn't exposed via a clean public API. We'd
         # need to scan the universe → root-place lookup ourselves. Skip
         # catalog signals and lean on member count.
     else:
-        history = fetch_user_past_games(creator_id, limit=20)
+        history = await fetch_user_past_games(creator_id, limit=20)
         games_total = len(history)
         games_successful = sum(
             1 for g in history if (g.get("playing") or 0) >= 1000
