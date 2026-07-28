@@ -172,28 +172,25 @@ def setup_commands(tree: app_commands.CommandTree):
         user_id = interaction.user.id
 
         add_user(user_id)
-        row = get_user_row(user_id)
+        f = get_user_filters(user_id)
 
-        if row is None:
+        if not f:
             await interaction.response.send_message(
                 "⚙️ No profile yet — set filters with **/settings**."
             )
             return
 
-        f = {
-            "min_visits": int(row[1] or 0),
-            "max_visits": int(row[2] or 0),
-            "min_players": int(row[3] or 0),
-            "max_players": int(row[4] or 0),
-            "min_growth": int(row[5] or 0),
-            "genre": row[6] or "Any",
-            "max_age": int(row[7] or 0),
-        }
-        # alert_level is at row[8] now — index after the max_age migration.
-        raw_alert_level = (
-            row[8] if len(row) > 8 else get_user_alert_level(user_id)
-        )
-        f["alert_level"] = (raw_alert_level or "all").lower()
+        f["alert_level"] = (get_user_alert_level(user_id) or "all").lower()
+        f["min_visits"] = f.get("minimum_visits", 0)
+        f["max_visits"] = f.get("maximum_visits", 0)
+        f["min_players"] = f.get("minimum_players", 0)
+        f["max_players"] = f.get("maximum_players", 0)
+        f["min_growth"] = f.get("minimum_growth", 0)
+        f["min_rating"] = f.get("minimum_rating", 75)
+        f["require_discord"] = f.get("require_discord", True)
+        f["require_rotrends"] = f.get("require_rotrends", True)
+        f["genre"] = f.get("genre", "Any")
+        f["max_age"] = f.get("max_age", 365)
 
         def _v(x):
             return "— (no cap)" if x == 0 else f"{x:,}"
@@ -202,17 +199,20 @@ def setup_commands(tree: app_commands.CommandTree):
             f"""
 🎮 Scout Profile
 
-Minimum Visits:
-{f['min_visits']:,}
+CCU:
+{f['min_players']:,} - {_v(f['max_players'])}
 
-Maximum Visits:
-{_v(f['max_visits'])}
+Visits:
+{f['min_visits']:,} - {_v(f['max_visits'])}
 
-Minimum Players:
-{f['min_players']:,}
+Rating:
+{f['min_rating']}%+
 
-Maximum Players:
-{_v(f['max_players'])}
+Discord Required:
+{'Yes' if f['require_discord'] else 'No'}
+
+RoTrends Required:
+{'Yes' if f['require_rotrends'] else 'No'}
 
 Minimum Growth:
 {f['min_growth']}%
@@ -284,11 +284,11 @@ Max Game Age:
             f"""
 ⚙️ Scout Settings Updated
 
-Minimum Visits: {f['minimum_visits']:,}
-Maximum Visits: {_v(f['maximum_visits'])}
-
-Minimum Players: {f['minimum_players']:,}
-Maximum Players: {_v(f['maximum_players'])}
+CCU: {f['minimum_players']:,} - {f['maximum_players']:,}
+Visits: {f['minimum_visits']:,} - {_v(f['maximum_visits'])}
+Rating: {f['minimum_rating']}%+
+Discord Required: {'Yes' if f['require_discord'] else 'No'}
+RoTrends Required: {'Yes' if f['require_rotrends'] else 'No'}
 
 Minimum Growth: {f['minimum_growth']}%
 Genre Filter: {f['genre']}

@@ -21,6 +21,9 @@ def _recreate_users_table(cursor):
         minimum_players INTEGER DEFAULT 15,
         maximum_players INTEGER DEFAULT 2500,
         minimum_growth INTEGER DEFAULT 0,
+        minimum_rating INTEGER DEFAULT 75,
+        require_discord INTEGER DEFAULT 1,
+        require_rotrends INTEGER DEFAULT 1,
         genre TEXT DEFAULT 'Any',
         max_age INTEGER DEFAULT 365,
         alert_level TEXT DEFAULT 'all'
@@ -39,6 +42,9 @@ def create_database():
         "minimum_players",
         "maximum_players",
         "minimum_growth",
+        "minimum_rating",
+        "require_discord",
+        "require_rotrends",
         "genre",
         "max_age",
         "alert_level",
@@ -52,6 +58,9 @@ def create_database():
         minimum_players INTEGER DEFAULT 15,
         maximum_players INTEGER DEFAULT 2500,
         minimum_growth INTEGER DEFAULT 0,
+        minimum_rating INTEGER DEFAULT 75,
+        require_discord INTEGER DEFAULT 1,
+        require_rotrends INTEGER DEFAULT 1,
         genre TEXT DEFAULT 'Any',
         max_age INTEGER DEFAULT 365,
         alert_level TEXT DEFAULT 'all'
@@ -67,9 +76,15 @@ def create_database():
 
     # In-place migrations for users tables predating the Smart Filters columns.
     if "maximum_visits" not in existing_columns:
-        cursor.execute("ALTER TABLE users ADD COLUMN maximum_visits INTEGER DEFAULT 0")
+        cursor.execute("ALTER TABLE users ADD COLUMN maximum_visits INTEGER DEFAULT 1500000")
     if "maximum_players" not in existing_columns:
-        cursor.execute("ALTER TABLE users ADD COLUMN maximum_players INTEGER DEFAULT 0")
+        cursor.execute("ALTER TABLE users ADD COLUMN maximum_players INTEGER DEFAULT 2500")
+    if "minimum_rating" not in existing_columns:
+        cursor.execute("ALTER TABLE users ADD COLUMN minimum_rating INTEGER DEFAULT 75")
+    if "require_discord" not in existing_columns:
+        cursor.execute("ALTER TABLE users ADD COLUMN require_discord INTEGER DEFAULT 1")
+    if "require_rotrends" not in existing_columns:
+        cursor.execute("ALTER TABLE users ADD COLUMN require_rotrends INTEGER DEFAULT 1")
     if "alert_level" not in existing_columns:
         cursor.execute("ALTER TABLE users ADD COLUMN alert_level TEXT DEFAULT 'all'")
 
@@ -253,7 +268,7 @@ def update_user(
 
 
 def get_user_filters(discord_id):
-    """Return a dict of filter settings for a user, with defaults if missing."""
+    """Return a dict of filter settings for a user, normalized to the current defaults."""
     add_user(discord_id)
 
     conn = sqlite3.connect(DATABASE)
@@ -262,36 +277,97 @@ def get_user_filters(discord_id):
     cursor.execute("""
     SELECT minimum_visits, maximum_visits,
            minimum_players, maximum_players,
-           minimum_growth, genre, max_age, alert_level
+           minimum_growth, minimum_rating, require_discord, require_rotrends,
+           genre, max_age, alert_level
     FROM users
     WHERE discord_id = ?
     """, (discord_id,))
 
     row = cursor.fetchone()
-    conn.close()
+
+    defaults = {
+        "minimum_visits": 0,
+        "maximum_visits": 1_500_000,
+        "minimum_players": 15,
+        "maximum_players": 2500,
+        "minimum_growth": 0,
+        "minimum_rating": 75,
+        "require_discord": True,
+        "require_rotrends": True,
+        "genre": "Any",
+        "max_age": 365,
+        "alert_level": "all",
+    }
 
     if row is None:
-        return {
-            "minimum_visits": 0,
-            "maximum_visits": 1_500_000,
-            "minimum_players": 15,
-            "maximum_players": 2500,
-            "minimum_growth": 0,
-            "genre": "Any",
-            "max_age": 365,
-            "alert_level": "all",
-        }
+        return defaults
 
-    return {
-        "minimum_visits": int(row[0] or 0),
-        "maximum_visits": int(row[1] or 0),
-        "minimum_players": int(row[2] or 0),
-        "maximum_players": int(row[3] or 0),
-        "minimum_growth": int(row[4] or 0),
-        "genre": row[5] or "Any",
-        "max_age": int(row[6] or 0),
-        "alert_level": (row[7] or "all").lower(),
-    }
+    normalized = dict(defaults)
+    needs_update = False
+    normalized.update(
+        {
+            "minimum_visits": int(row[0]) if row[0] is not None else defaults["minimum_visits"],
+            "maximum_visits": int(row[1]) if row[1] is not None else defaults["maximum_visits"],
+            "minimum_players": int(row[2]) if row[2] is not None else defaults["minimum_players"],
+            "maximum_players": int(row[3]) if row[3] is not None else defaults["maximum_players"],
+            "minimum_growth": int(row[4]) if row[4] is not None else defaults["minimum_growth"],
+            "minimum_rating": int(row[5]) if row[5] is not None else defaults["minimum_rating"],
+            "require_discord": bool(int(row[6])) if row[6] is not None else defaults["require_discord"],
+            "require_rotrends": bool(int(row[7])) if row[7] is not None else defaults["require_rotrends"],
+            "genre": row[8] or defaults["genre"],
+            "max_age": int(row[9]) if row[9] is not None else defaults["max_age"],
+            "alert_level": (row[10] or defaults["alert_level"]).lower(),
+        }
+    )
+
+    # Migrate legacy/empty values to the new acquisition defaults when they are
+    # still using the old broad defaults.
+    if normalized["minimum_visits"] == 100000 and normalized["maximum_visits"] == 0:
+        normalized["minimum_visits"] = defaults["minimum_visits"]
+        normalized["maximum_visits"] = defaults["maximum_visits"]
+        needs_update = True
+
+    if normalized["minimum_players"] == 100 and normalized["maximum_players"] == 0:
+        normalized["minimum_players"] = defaults["minimum_players"]
+        normalized["maximum_players"] = defaults["maximum_players"]
+        needs_update = True
+
+    if normalized["minimum_rating"] in (0, None):
+        normalized["minimum_rating"] = defaults["minimum_rating"]
+        needs_update = True
+
+    if normalized["require_discord"] is False:
+        normalized["require_discord"] = defaults["require_discord"]
+        needs_update = True
+
+    if normalized["require_rotrends"] is False:
+        normalized["require_rotrends"] = defaults["require_rotrends"]
+        needs_update = True
+
+    if needs_update:
+        cursor.execute(
+            """
+            UPDATE users
+            SET minimum_visits = ?, maximum_visits = ?, minimum_players = ?,
+                maximum_players = ?, minimum_rating = ?, require_discord = ?,
+                require_rotrends = ?
+            WHERE discord_id = ?
+            """,
+            (
+                normalized["minimum_visits"],
+                normalized["maximum_visits"],
+                normalized["minimum_players"],
+                normalized["maximum_players"],
+                normalized["minimum_rating"],
+                int(normalized["require_discord"]),
+                int(normalized["require_rotrends"]),
+                discord_id,
+            ),
+        )
+        conn.commit()
+
+    conn.close()
+    return normalized
 
 
 def get_user_alert_level(discord_id):
