@@ -56,7 +56,7 @@ async def _post_alert(channel, game):
     """Send a single alert embed with buttons to *channel*."""
     priority = _classify_scan_priority(game)
     embed = create_alert_embed(game, priority=priority)
-    view = AlertButtons(game)
+    view = AlertButtons.with_game(game)
     await channel.send(embed=embed, view=view)
 
 

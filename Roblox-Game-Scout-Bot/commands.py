@@ -129,7 +129,7 @@ def setup_commands(tree: app_commands.CommandTree):
         embed = create_alert_embed(sample_game)
         await interaction.response.send_message(
             embed=embed,
-            view=AlertButtons(sample_game),
+            view=AlertButtons.with_game(sample_game),
         )
 
     @tree.command(

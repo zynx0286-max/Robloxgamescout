@@ -29,7 +29,7 @@ class MyBot(discord.Client):
         # Register persistent alert buttons so Discord interaction dispatches
         # reach the bot even after a restart. Without this, button presses
         # on scheduled alert embeds timeout with "didn't respond in time".
-        self.add_view(AlertButtons.__new__(AlertButtons))
+        self.add_view(AlertButtons())
 
         if GUILD_ID:
             guild = discord.Object(id=int(GUILD_ID))
