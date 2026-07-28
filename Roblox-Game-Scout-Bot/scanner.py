@@ -225,7 +225,7 @@ async def _fetch_game_details_async(
         if details is None:
             # Try async fallback
             try:
-                info = await get_game_info(stub["id"])
+                info = await get_game_info(stub["id"], session=session)
                 if info is None:
                     continue
                 details = info

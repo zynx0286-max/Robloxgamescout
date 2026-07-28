@@ -2,32 +2,36 @@ import asyncio
 import aiohttp
 
 
-async def get_game_info(place_id, retries=3, delay=0.5):
-    """Fetch Roblox game info with retries (async version)."""
-    url = f"https://games.roblox.com/v1/games?universeIds={place_id}"
-
+async def _fetch_game_info_with_session(session, url, place_id, retries=3, delay=0.5):
+    """Fetch Roblox game info with retries using an existing aiohttp session."""
     for attempt in range(retries):
         try:
-            async with aiohttp.ClientSession() as session:
-                async with session.get(url, timeout=aiohttp.ClientTimeout(total=10)) as response:
-                    if response.status_code == 200:
-                        data = await response.json()
-                        if data.get("data"):
-                            game = data["data"][0]
-                            return {
-                                "id": place_id,
-                                "place_id": game.get("rootPlaceId", place_id),
-                                "name": game["name"],
-                                "playing": game["playing"],
-                                "visits": game["visits"],
-                                "favorites": game["favoritedCount"],
-                                "creator": game["creator"]["name"]
-                            }
+            async with session.get(
+                url,
+                timeout=aiohttp.ClientTimeout(total=10),
+            ) as response:
+                if response.status == 200:
+                    data = await response.json()
+                    if data.get("data"):
+                        game = data["data"][0]
+                        return {
+                            "id": place_id,
+                            "place_id": game.get("rootPlaceId", place_id),
+                            "name": game["name"],
+                            "playing": game["playing"],
+                            "visits": game["visits"],
+                            "favorites": game["favoritedCount"],
+                            "creator": game["creator"]["name"],
+                        }
 
-                    if response.status_code == 429:
-                        await asyncio.sleep(delay * (attempt + 1))
-                        continue
+                if response.status == 429:
+                    await asyncio.sleep(delay * (attempt + 1))
+                    continue
 
+        except asyncio.TimeoutError:
+            pass
+        except aiohttp.ClientError:
+            pass
         except Exception:
             pass
 
@@ -35,6 +39,29 @@ async def get_game_info(place_id, retries=3, delay=0.5):
             await asyncio.sleep(delay)
 
     return None
+
+
+async def get_game_info(place_id, retries=3, delay=0.5, session=None):
+    """Fetch Roblox game info with retries (async version)."""
+    url = f"https://games.roblox.com/v1/games?universeIds={place_id}"
+
+    if session is None:
+        async with aiohttp.ClientSession() as local_session:
+            return await _fetch_game_info_with_session(
+                local_session,
+                url,
+                place_id,
+                retries=retries,
+                delay=delay,
+            )
+
+    return await _fetch_game_info_with_session(
+        session,
+        url,
+        place_id,
+        retries=retries,
+        delay=delay,
+    )
 
 
 # Keep a sync wrapper for backward compatibility with non-async code
