@@ -6,6 +6,7 @@ from database import create_database
 from commands import setup_commands
 from scheduler import start_scheduler, stop_scheduler
 from ai_scout_channel import handle_ai_scout_message
+from buttons import AlertButtons
 
 load_dotenv()
 
@@ -24,6 +25,11 @@ class MyBot(discord.Client):
     async def setup_hook(self):
         create_database()
         setup_commands(self.tree)
+
+        # Register persistent alert buttons so Discord interaction dispatches
+        # reach the bot even after a restart. Without this, button presses
+        # on scheduled alert embeds timeout with "didn't respond in time".
+        self.add_view(AlertButtons.__new__(AlertButtons))
 
         if GUILD_ID:
             guild = discord.Object(id=int(GUILD_ID))
