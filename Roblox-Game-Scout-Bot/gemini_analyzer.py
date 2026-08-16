@@ -487,7 +487,13 @@ def answer_question(question, force_refresh=False, history=None):
             if not answer:
                 answer = "(Gemini returned an empty response.)"
         else:
-            answer = f"⚠️ Gemini returned HTTP {r.status_code}: {r.text[:200]}"
+            if r.status_code == 429:
+                answer = (
+                    "⚠️ Gemini is rate-limited right now (HTTP 429). "
+                    "Try again in a minute, or wait for the next daily quota window."
+                )
+            else:
+                answer = f"⚠️ Gemini returned HTTP {r.status_code}: {r.text[:200]}"
     except Exception as exc:
         answer = f"⚠️ Gemini call failed: `{exc}`"
 

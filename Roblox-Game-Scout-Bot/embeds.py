@@ -2,10 +2,11 @@
 Discord embed builders for the Game Scout alert system.
 
 Every alert embed must include:
-  Game Name, Universe ID, Roblox Game Link, RoTrends Link,
+  Game Name, Universe ID, Roblox Game Link, Market Analytics Links
+  (Roblox Charts, RoMonitor Stats, Creator Exchange),
   Discord Invite Link, Creator/Group, Current CCU, Total Visits,
   Rating (%), Favorites, Genre, Creation Date, Last Updated,
-  Game Thumbnail/Icon, RoTrends Growth Data (if available),
+  Game Thumbnail/Icon, Growth Data (if available),
   AI Opportunity Score, AI Summary
 """
 
@@ -60,7 +61,10 @@ def create_alert_embed(game: dict, priority: str = None) -> discord.Embed:
     universe_id = game.get("id", "N/A")
     place_id = game.get("place_id") or universe_id
     roblox_url = game.get("roblox_url") or f"https://www.roblox.com/games/{place_id}"
-    rotrends_url = game.get("rotrends_url") or f"https://rotrends.com/game/{universe_id}"
+    market_links = game.get("market_links") or {}
+    if not market_links and isinstance(universe_id, int):
+        from trending_sources import build_analytics_links
+        market_links = build_analytics_links(universe_id)
     discord_invite = game.get("discord_invite", "Not found")
     creator = game.get("creator", "Unknown")
     current_ccu = f"{_safe_int(game.get('playing')):,}"
@@ -138,9 +142,13 @@ def create_alert_embed(game: dict, priority: str = None) -> discord.Embed:
         value=f"[Open on Roblox]({roblox_url})",
         inline=False,
     )
+
+    market_link_text = "\n".join(
+        f"[{name}]({url})" for name, url in market_links.items()
+    ) or "Not available"
     embed.add_field(
-        name="📊 RoTrends Link",
-        value=f"[View on RoTrends]({rotrends_url})",
+        name="📊 Market Links",
+        value=market_link_text,
         inline=True,
     )
     embed.add_field(
@@ -153,10 +161,10 @@ def create_alert_embed(game: dict, priority: str = None) -> discord.Embed:
     embed.add_field(name="📅 Created", value=created, inline=True)
     embed.add_field(name="🔄 Last Updated", value=updated, inline=True)
 
-    # --- Row 5: RoTrends Growth Data ---
+    # --- Row 5: Growth Data ---
     if growth != 0:
         embed.add_field(
-            name="📊 RoTrends Growth",
+            name="📊 Growth Data",
             value=f"Player growth: {growth_str}\n"
                   f"Trend score: {game.get('trend_score', 'N/A')}/100",
             inline=False,
@@ -195,18 +203,29 @@ def create_tracker_embed(
     players_delta: float,
     visits_delta: float,
     tracked_since: str,
+    priority: str = None,
 ) -> discord.Embed:
     """
     Build an embed for a tracked-game CCU/visits alert.
 
     Used by commands.py /testtracker and the tracker module.
     """
+    if priority == PRIORITY_HIGH:
+        color = discord.Color.gold()
+        title = f"🚨 BREAKOUT DETECTED: {game_name}"
+    elif priority == PRIORITY_MEDIUM:
+        color = discord.Color.orange()
+        title = f"📈 GROWING OPPORTUNITY: {game_name}"
+    else:
+        color = discord.Color.green()
+        title = f"📊 Tracker Alert: {game_name}"
+
     embed = discord.Embed(
-        title=f"📊 Tracker Alert: {game_name}",
+        title=title,
         description=(
             f"**{game_name}** has seen a significant change in player activity."
         ),
-        color=discord.Color.green(),
+        color=color,
         timestamp=discord.utils.utcnow(),
     )
 

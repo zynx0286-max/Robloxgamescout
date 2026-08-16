@@ -23,7 +23,7 @@ def _recreate_users_table(cursor):
         minimum_growth INTEGER DEFAULT 0,
         minimum_rating INTEGER DEFAULT 75,
         require_discord INTEGER DEFAULT 1,
-        require_rotrends INTEGER DEFAULT 1,
+        require_market_links INTEGER DEFAULT 1,
         genre TEXT DEFAULT 'Any',
         max_age INTEGER DEFAULT 365,
         alert_level TEXT DEFAULT 'all'
@@ -44,7 +44,7 @@ def create_database():
         "minimum_growth",
         "minimum_rating",
         "require_discord",
-        "require_rotrends",
+        "require_market_links",
         "genre",
         "max_age",
         "alert_level",
@@ -60,7 +60,7 @@ def create_database():
         minimum_growth INTEGER DEFAULT 0,
         minimum_rating INTEGER DEFAULT 75,
         require_discord INTEGER DEFAULT 1,
-        require_rotrends INTEGER DEFAULT 1,
+        require_market_links INTEGER DEFAULT 1,
         genre TEXT DEFAULT 'Any',
         max_age INTEGER DEFAULT 365,
         alert_level TEXT DEFAULT 'all'
@@ -83,8 +83,19 @@ def create_database():
         cursor.execute("ALTER TABLE users ADD COLUMN minimum_rating INTEGER DEFAULT 75")
     if "require_discord" not in existing_columns:
         cursor.execute("ALTER TABLE users ADD COLUMN require_discord INTEGER DEFAULT 1")
-    if "require_rotrends" not in existing_columns:
-        cursor.execute("ALTER TABLE users ADD COLUMN require_rotrends INTEGER DEFAULT 1")
+    if "require_market_links" not in existing_columns:
+        # Migrate the old RoTrends requirement into require_market_links.
+        if "require_rotrends" in existing_columns:
+            cursor.execute(
+                "ALTER TABLE users ADD COLUMN require_market_links INTEGER DEFAULT 1"
+            )
+            cursor.execute(
+                "UPDATE users SET require_market_links = require_rotrends"
+            )
+        else:
+            cursor.execute(
+                "ALTER TABLE users ADD COLUMN require_market_links INTEGER DEFAULT 1"
+            )
     if "alert_level" not in existing_columns:
         cursor.execute("ALTER TABLE users ADD COLUMN alert_level TEXT DEFAULT 'all'")
 
@@ -184,6 +195,10 @@ def create_database():
     conn.commit()
     conn.close()
 
+    # Portfolio live-data tables (kept separate from the bot tables above).
+    from portfolio_db import create_portfolio_tables
+    create_portfolio_tables()
+
 
 def add_user(discord_id):
     conn = sqlite3.connect(DATABASE)
@@ -277,7 +292,7 @@ def get_user_filters(discord_id):
     cursor.execute("""
     SELECT minimum_visits, maximum_visits,
            minimum_players, maximum_players,
-           minimum_growth, minimum_rating, require_discord, require_rotrends,
+           minimum_growth, minimum_rating, require_discord, require_market_links,
            genre, max_age, alert_level
     FROM users
     WHERE discord_id = ?
@@ -293,7 +308,7 @@ def get_user_filters(discord_id):
         "minimum_growth": 0,
         "minimum_rating": 75,
         "require_discord": True,
-        "require_rotrends": True,
+        "require_market_links": True,
         "genre": "Any",
         "max_age": 365,
         "alert_level": "all",
@@ -313,7 +328,7 @@ def get_user_filters(discord_id):
             "minimum_growth": int(row[4]) if row[4] is not None else defaults["minimum_growth"],
             "minimum_rating": int(row[5]) if row[5] is not None else defaults["minimum_rating"],
             "require_discord": bool(int(row[6])) if row[6] is not None else defaults["require_discord"],
-            "require_rotrends": bool(int(row[7])) if row[7] is not None else defaults["require_rotrends"],
+            "require_market_links": bool(int(row[7])) if row[7] is not None else defaults["require_market_links"],
             "genre": row[8] or defaults["genre"],
             "max_age": int(row[9]) if row[9] is not None else defaults["max_age"],
             "alert_level": (row[10] or defaults["alert_level"]).lower(),
@@ -340,8 +355,8 @@ def get_user_filters(discord_id):
         normalized["require_discord"] = defaults["require_discord"]
         needs_update = True
 
-    if normalized["require_rotrends"] is False:
-        normalized["require_rotrends"] = defaults["require_rotrends"]
+    if normalized["require_market_links"] is False:
+        normalized["require_market_links"] = defaults["require_market_links"]
         needs_update = True
 
     if needs_update:
@@ -350,7 +365,7 @@ def get_user_filters(discord_id):
             UPDATE users
             SET minimum_visits = ?, maximum_visits = ?, minimum_players = ?,
                 maximum_players = ?, minimum_rating = ?, require_discord = ?,
-                require_rotrends = ?
+                require_market_links = ?
             WHERE discord_id = ?
             """,
             (
@@ -360,7 +375,7 @@ def get_user_filters(discord_id):
                 normalized["maximum_players"],
                 normalized["minimum_rating"],
                 int(normalized["require_discord"]),
-                int(normalized["require_rotrends"]),
+                int(normalized["require_market_links"]),
                 discord_id,
             ),
         )

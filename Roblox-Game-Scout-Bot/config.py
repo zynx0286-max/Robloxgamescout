@@ -58,6 +58,29 @@ MIN_VELOCITY_SNAPSHOTS = int(os.getenv("MIN_VELOCITY_SNAPSHOTS", "3"))
 # Trending detection: CCU spike multiplier above rolling average
 VELOCITY_SPIKE_THRESHOLD = float(os.getenv("VELOCITY_SPIKE_THRESHOLD", "1.5"))
 
-# Additional scrape sources (comma-separated URLs, can be disabled individually)
-ENABLE_ROTRENDS = os.getenv("ENABLE_ROTRENDS", "true").lower() == "true"
-ENABLE_ROBLOPOLIS = os.getenv("ENABLE_ROBLOPOLIS", "true").lower() == "true"
+# Trending/discovery sources. Roblox Charts uses the official Roblox
+# explore API (same data that powers roblox.com/charts). RoMonitor Stats
+# and Creator Exchange have no public game-list APIs, so they are used for
+# per-game analytics links on embeds rather than as discovery scrapers.
+ENABLE_ROBLOX_CHARTS = os.getenv("ENABLE_ROBLOX_CHARTS", "true").lower() == "true"
+ENABLE_ROMONITOR = os.getenv("ENABLE_ROMONITOR", "true").lower() == "true"
+ENABLE_CREATOR_EXCHANGE = os.getenv("ENABLE_CREATOR_EXCHANGE", "true").lower() == "true"
+
+# ---- Portfolio Live-Data System ----
+# Worker interval between snapshot collections (seconds). 60 = current
+# players refresh roughly every minute; heavier stats ride along.
+PORTFOLIO_WORKER_INTERVAL = int(os.getenv("PORTFOLIO_WORKER_INTERVAL", "60"))
+
+# How long the portfolio API keeps a cached response (seconds). 30-120 is
+# the sweet spot: fresh enough for a "Updated N seconds ago" badge without
+# hammering Roblox on every visitor.
+PORTFOLIO_CACHE_SECONDS = int(os.getenv("PORTFOLIO_CACHE_SECONDS", "60"))
+
+# Comma-separated CORS origins allowed to call the public portfolio API
+# directly from the browser (Framer custom code). "*" allows any origin;
+# data served is intentionally public.
+PORTFOLIO_CORS_ORIGINS = os.getenv("PORTFOLIO_CORS_ORIGINS", "*")
+
+# Bind host/port for `uvicorn portfolio_api:app` / the worker's API runner.
+PORTFOLIO_API_HOST = os.getenv("PORTFOLIO_API_HOST", "0.0.0.0")
+PORTFOLIO_API_PORT = int(os.getenv("PORTFOLIO_API_PORT", "8000"))

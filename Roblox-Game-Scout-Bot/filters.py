@@ -9,6 +9,8 @@ import logging
 import re
 from typing import Optional
 
+from trending_sources import build_analytics_links
+
 logger = logging.getLogger("filters")
 
 # Hard filter thresholds
@@ -67,13 +69,16 @@ def _check_roblox_link(game: dict) -> tuple[bool, str]:
     return True, ""
 
 
-def _check_rotrends_link(game: dict) -> tuple[bool, str]:
-    """Check the game generates a valid RoTrends URL."""
+def _check_market_links(game: dict) -> tuple[bool, str]:
+    """Attach analytics links (Roblox Charts, RoMonitor, Creator Exchange).
+
+    A link can always be generated from a valid universe ID, so this check
+    never rejects a game — it only enriches the game dict for embeds.
+    """
     universe_id = game.get("id")
     if not universe_id:
-        return False, "No universe id available to build RoTrends link"
-    # Store the generated link on the game dict for later use
-    game["rotrends_url"] = f"https://rotrends.com/game/{universe_id}"
+        return False, "No universe id available to build analytics links"
+    game["market_links"] = build_analytics_links(universe_id)
     return True, ""
 
 
@@ -112,8 +117,8 @@ def passes_alert_filters(game: dict) -> tuple[bool, list[str]]:
     if not ok:
         failures.append(reason)
 
-    # 6. RoTrends link check
-    ok, reason = _check_rotrends_link(game)
+    # 6. Analytics links check (Roblox Charts, RoMonitor, Creator Exchange)
+    ok, reason = _check_market_links(game)
     if not ok:
         failures.append(reason)
 

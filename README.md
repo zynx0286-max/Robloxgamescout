@@ -1,11 +1,12 @@
 # Roblox Game Scout
 
-Roblox Game Scout is an acquisition-focused Discord bot that discovers Roblox games with strong commercial potential by combining live Roblox data, RoTrends signals, Discord/social link presence, and lightweight scoring.
+Roblox Game Scout is an acquisition-focused Discord bot that discovers Roblox games with strong commercial potential by combining live Roblox data, official Roblox Charts signals, Discord/social link presence, and lightweight scoring.
 
 ## What it does
 
 - Scans Roblox games for acquisition-style opportunities
-- Enforces acquisition-friendly defaults such as CCU, visits, rating, Discord presence, and RoTrends availability
+- Enforces acquisition-friendly defaults such as CCU, visits, rating, Discord presence, and market analytics links
+- Sources trending games from the official Roblox Charts explore API (the data behind roblox.com/charts) and links each result to RoMonitor Stats and Creator Exchange
 - Runs slash commands in Discord such as /scan, /settings, /profile, and /analyze
 - Supports automated scanning and alerting workflows
 

@@ -188,7 +188,7 @@ def setup_commands(tree: app_commands.CommandTree):
         f["min_growth"] = f.get("minimum_growth", 0)
         f["min_rating"] = f.get("minimum_rating", 75)
         f["require_discord"] = f.get("require_discord", True)
-        f["require_rotrends"] = f.get("require_rotrends", True)
+        f["require_market_links"] = f.get("require_market_links", True)
         f["genre"] = f.get("genre", "Any")
         f["max_age"] = f.get("max_age", 365)
 
@@ -211,8 +211,8 @@ Rating:
 Discord Required:
 {'Yes' if f['require_discord'] else 'No'}
 
-RoTrends Required:
-{'Yes' if f['require_rotrends'] else 'No'}
+Market Links Required (Charts / RoMonitor / Creator Exchange):
+{'Yes' if f['require_market_links'] else 'No'}
 
 Minimum Growth:
 {f['min_growth']}%
@@ -288,7 +288,7 @@ CCU: {f['minimum_players']:,} - {f['maximum_players']:,}
 Visits: {f['minimum_visits']:,} - {_v(f['maximum_visits'])}
 Rating: {f['minimum_rating']}%+
 Discord Required: {'Yes' if f['require_discord'] else 'No'}
-RoTrends Required: {'Yes' if f['require_rotrends'] else 'No'}
+Market Links Required: {'Yes' if f['require_market_links'] else 'No'}
 
 Minimum Growth: {f['minimum_growth']}%
 Genre Filter: {f['genre']}
@@ -466,7 +466,7 @@ Filters:
 CCU: {user_settings['minimum_players']:,} to {user_settings['maximum_players']:,}
 Visits: below {user_settings['maximum_visits']:,}
 Rating: 75%+ required
-Links: Roblox URL + RoTrends + Discord required
+Links: Roblox + Charts + Discord required
 Growth: {user_settings['minimum_growth']}%
 Genre: {user_settings['genre']}
 Max Age: {user_settings['max_age']} days
@@ -494,7 +494,7 @@ Please wait while I find the best acquisition opportunities...
                 f"Games passing visits filter: {diagnostics['visits_passes']}\n"
                 f"Games passing rating filter: {diagnostics['rating_passes']}\n"
                 f"Games with Discord: {diagnostics['discord_present']}\n"
-                f"Games with RoTrends: {diagnostics['rotrends_present']}\n"
+                f"Games with market links: {diagnostics['market_links_present']}\n"
                 f"Final matches: {diagnostics['final_matches']}"
             )
             return
@@ -506,7 +506,7 @@ Please wait while I find the best acquisition opportunities...
             f"Games passing visits filter: {diagnostics['visits_passes']}\n"
             f"Games passing rating filter: {diagnostics['rating_passes']}\n"
             f"Games with Discord: {diagnostics['discord_present']}\n"
-            f"Games with RoTrends: {diagnostics['rotrends_present']}\n"
+            f"Games with market links: {diagnostics['market_links_present']}\n"
             f"Final matches: {diagnostics['final_matches']}"
         )
         await interaction.followup.send(summary_message)

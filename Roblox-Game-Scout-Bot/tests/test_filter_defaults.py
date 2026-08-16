@@ -36,7 +36,7 @@ def test_default_user_filters_match_acquisition_requirements(tmp_path):
         assert user_filters["minimum_growth"] == 0
         assert user_filters["minimum_rating"] == 75
         assert user_filters["require_discord"] is True
-        assert user_filters["require_rotrends"] is True
+        assert user_filters["require_market_links"] is True
     finally:
         config.DATABASE_PATH = original_config_path
         database.DATABASE = original_database_path

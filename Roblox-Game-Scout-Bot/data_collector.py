@@ -14,7 +14,7 @@ from typing import Optional
 import aiohttp
 
 from game_search import get_curated_seeds
-from rotrends import get_third_party_trending
+from trending_sources import get_third_party_trending
 from roblox_search import (
     DEFAULT_KEYWORDS,
     multi_keyword_search,
@@ -26,7 +26,7 @@ from roblox_search import (
 from config import (
     SEARCH_KEYWORDS_PER_CYCLE,
     SEARCH_TOTAL_LIMIT,
-    ENABLE_ROTRENDS,
+    ENABLE_ROBLOX_CHARTS,
 )
 from utils import remove_duplicates
 
@@ -64,7 +64,7 @@ async def collect_games_async(
       2. Roblox API new games (recently created)
       3. Roblox API recommendations (from seed games)
       4. Curated seed list (fallback)
-      5. Third-party scrapers (RoTrends, RobloxGames)
+      5. Third-party trending (Roblox Charts explore API)
 
     Args:
         session: aiohttp ClientSession for HTTP requests
@@ -132,14 +132,14 @@ async def collect_games_async(
     all_games.extend(curated)
     logger.info("Curated seeds: %d games", len(curated))
 
-    # --- Source 6: Third-party scrapers ---
-    if ENABLE_ROTRENDS:
+    # --- Source 6: Third-party trending (Roblox Charts + optional sources) ---
+    if ENABLE_ROBLOX_CHARTS:
         try:
             third_party = await get_third_party_trending(session)
             all_games.extend(third_party)
-            logger.info("Third-party scrapers: %d games", len(third_party))
+            logger.info("Third-party trending: %d games", len(third_party))
         except Exception as exc:
-            logger.warning("Third-party scrapers failed: %s", exc)
+            logger.warning("Third-party trending failed: %s", exc)
 
     # Deduplicate and return
     unique = remove_duplicates(all_games)
@@ -156,7 +156,7 @@ def collect_games():
     Synchronous wrapper for collect_games_async.
 
     Used by the legacy synchronous scanner path.
-    Falls back to curated seeds + sync rotrends if async is unavailable.
+    Falls back to curated seeds + sync Roblox Charts if async is unavailable.
     """
     # Try async path first
     try:
@@ -173,11 +173,11 @@ def collect_games():
     except Exception as exc:
         logger.warning("Async collection failed, falling back to sync: %s", exc)
 
-    # Fallback: curated seeds + sync rotrends
-    from rotrends import get_trending_games
+    # Fallback: curated seeds + sync Roblox Charts
+    from trending_sources import get_trending_games
     games = get_curated_seeds()
     try:
         games.extend(get_trending_games())
     except Exception as exc:
-        logger.warning("Sync rotrends failed: %s", exc)
+        logger.warning("Sync Roblox Charts failed: %s", exc)
     return remove_duplicates(games)

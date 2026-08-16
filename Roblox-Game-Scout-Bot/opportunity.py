@@ -14,8 +14,9 @@ def analyze_game(game):
     elif growth >= 50:
         reasons.append("📈 Positive player growth")
 
-    if game.get("source") == "RoTrends":
-        reasons.append("🌐 Found through RoTrends")
+    if game.get("source") in ("RobloxCharts", "Curated"):
+        reason = "📈 Featured on Roblox Charts" if game.get("source") == "RobloxCharts" else "📈 Curated seed game"
+        reasons.append(reason)
 
     if game["playing"] >= 5000:
         reasons.append("👥 High active player count")

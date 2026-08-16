@@ -74,7 +74,7 @@ def _build_filter_diagnostics(game: dict, failures: list[str]) -> dict:
         "visits_pass": not any(reason.startswith("Visits") for reason in failures),
         "rating_pass": not any(reason.startswith("Rating") for reason in failures),
         "discord_present": bool(game.get("discord_invite")),
-        "rotrends_present": bool(game.get("rotrends_url")),
+        "market_links_present": bool(game.get("market_links")),
     }
 
 
@@ -358,7 +358,7 @@ async def scan_games_async(
         "visits_passes": 0,
         "rating_passes": 0,
         "discord_present": 0,
-        "rotrends_present": 0,
+        "market_links_present": 0,
         "final_matches": 0,
     }
     for info in enriched:
@@ -388,8 +388,8 @@ async def scan_games_async(
                 diagnostics["rating_passes"] += 1
             if filter_diagnostics["discord_present"]:
                 diagnostics["discord_present"] += 1
-            if filter_diagnostics["rotrends_present"]:
-                diagnostics["rotrends_present"] += 1
+            if filter_diagnostics["market_links_present"]:
+                diagnostics["market_links_present"] += 1
 
             # Apply user filters
             if passes_filters(info, user_settings):
