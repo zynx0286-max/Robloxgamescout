@@ -1,0 +1,12 @@
+.git
+.gitignore
+**/__pycache__
+*.pyc
+*.db
+*.db-journal
+*.db-wal
+.env
+.env.*
+node_modules
+artifacts
+attached_assets

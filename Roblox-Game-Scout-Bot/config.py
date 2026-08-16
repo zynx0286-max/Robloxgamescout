@@ -82,5 +82,6 @@ PORTFOLIO_CACHE_SECONDS = int(os.getenv("PORTFOLIO_CACHE_SECONDS", "60"))
 PORTFOLIO_CORS_ORIGINS = os.getenv("PORTFOLIO_CORS_ORIGINS", "*")
 
 # Bind host/port for `uvicorn portfolio_api:app` / the worker's API runner.
+# `PORT` is set by most hosting providers (Render, Fly, Railway) and wins.
 PORTFOLIO_API_HOST = os.getenv("PORTFOLIO_API_HOST", "0.0.0.0")
-PORTFOLIO_API_PORT = int(os.getenv("PORTFOLIO_API_PORT", "8000"))
+PORTFOLIO_API_PORT = int(os.getenv("PORT", os.getenv("PORTFOLIO_API_PORT", "8000")))

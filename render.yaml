@@ -1,0 +1,15 @@
+services:
+  # One free service runs both the snapshot collector and the API so they
+  # share the same SQLite file. (Free tier gives each service its own disk;
+  # a separate worker would write to a database the API can't see.)
+  - type: web
+    name: game-scout-portfolio
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    plan: free
+    healthCheckPath: /api/v1/health
+    envVars:
+      - key: PORTFOLIO_CORS_ORIGINS
+        value: "*"
+      - key: PORTFOLIO_WORKER_INTERVAL
+        value: "60"
