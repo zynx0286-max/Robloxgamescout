@@ -3036,7 +3036,7 @@ def _market_breadth_html(label: str, breadth: dict) -> str:
         f'<b>{breadth["down_pct"]:.0f}%</b> down</span></div>'
         f'<div class="breadth-track" role="img" aria-label="'
         f'{_esc(label)} breadth: {breadth["up"]} up, {breadth["flat"]} flat, '
-        f'{breadth["down"]} down">{''.join(parts)}</div>'
+        f'{breadth["down"]} down">{"".join(parts)}</div>'
         f'<div class="breadth-scale"><span>{breadth["up"]} up · '
         f'{breadth["flat"]} flat</span><span>{breadth["down"]} down</span></div>'
         f'</div>'
@@ -3063,7 +3063,7 @@ def _market_histogram_html(buckets: list[dict], graded: int) -> str:
         )
     return (
         f'<div class="hist" role="list" aria-label="Distribution of 24h '
-        f'moves across {graded} games">{''.join(cols)}</div>'
+        f'moves across {graded} games">{"".join(cols)}</div>'
     )
 
 
@@ -3822,14 +3822,15 @@ def _chart_panel(detail, chart_width=920, chart_height=300) -> str:
             compact=True,
             benchmark=bench_points,
         )
+        empty_note = _empty(
+            f"No readings in this {label} window.",
+            "Longer windows may still have history.",
+        )
         content = (
             f'<div class="chart-wrap chart-wide">{wide}</div>'
             f'<div class="chart-wrap chart-narrow">{narrow}</div>'
             if wide and narrow
-            else f'<div class="chart-empty">{_empty(
-                f"No readings in this {label} window.",
-                "Longer windows may still have history."
-            )}</div>'
+            else f'<div class="chart-empty">{empty_note}</div>'
         )
         panes.append(
             f'<div data-pane="{key}" role="tabpanel" '
