@@ -7,7 +7,10 @@ on:
 jobs:
   tests:
     name: Full test suite + perf guard
-    runs-on: ubuntu-latest
+    # Pin the image: the ubuntu-latest alias is mid-migration and has been
+    # killing hosted jobs shortly after setup on this repo.
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
 
