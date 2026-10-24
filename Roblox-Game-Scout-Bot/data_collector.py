@@ -14,14 +14,13 @@ from typing import Optional
 import aiohttp
 
 from game_search import get_curated_seeds
-from trending_sources import get_third_party_trending
+from trending_sources import get_charts_trending
+import chart_rank
 from roblox_search import (
     DEFAULT_KEYWORDS,
     multi_keyword_search,
     search_new_games,
     fetch_recommendations,
-    SORT_POPULAR,
-    SORT_UPDATED,
 )
 from config import (
     SEARCH_KEYWORDS_PER_CYCLE,
@@ -64,7 +63,7 @@ async def collect_games_async(
       2. Roblox API new games (recently created)
       3. Roblox API recommendations (from seed games)
       4. Curated seed list (fallback)
-      5. Third-party trending (Roblox Charts explore API)
+      5. Roblox Charts (official explore API)
 
     Args:
         session: aiohttp ClientSession for HTTP requests
@@ -82,33 +81,33 @@ async def collect_games_async(
     logger.info("Searching keywords: %s", keywords)
 
     try:
-        # Search by popularity (most visited)
+        # Keyword search via the official omni-search API. (The legacy
+        # /v1/games/list endpoint was retired by Roblox, so there is no
+        # sort order anymore — popularity ranking happens at scoring time.)
         popular_games = await multi_keyword_search(
             session,
             keywords,
             limit_per_keyword=30,
             max_total=SEARCH_TOTAL_LIMIT,
-            sort_order=SORT_POPULAR,
         )
         all_games.extend(popular_games)
-        logger.info("Keyword search (popular): %d games", len(popular_games))
+        logger.info("Keyword search: %d games", len(popular_games))
     except Exception as exc:
-        logger.warning("Keyword search (popular) failed: %s", exc)
+        logger.warning("Keyword search failed: %s", exc)
 
-    # --- Source 2: Recently updated games (trending) ---
+    # --- Source 2: Trend-flavored keyword queries (deep scans) ---
     if is_deep_scan:
         try:
-            updated_games = await multi_keyword_search(
+            trend_games = await multi_keyword_search(
                 session,
-                keywords[:3],  # Use first 3 keywords for "recently updated" sort
+                ["trending", "popular", "new"],
                 limit_per_keyword=30,
                 max_total=90,
-                sort_order=SORT_UPDATED,
             )
-            all_games.extend(updated_games)
-            logger.info("Keyword search (updated): %d games", len(updated_games))
+            all_games.extend(trend_games)
+            logger.info("Trend keyword search: %d games", len(trend_games))
         except Exception as exc:
-            logger.warning("Keyword search (updated) failed: %s", exc)
+            logger.warning("Trend keyword search failed: %s", exc)
 
     # --- Source 3: Newly created games ---
     try:
@@ -132,21 +131,63 @@ async def collect_games_async(
     all_games.extend(curated)
     logger.info("Curated seeds: %d games", len(curated))
 
-    # --- Source 6: Third-party trending (Roblox Charts + optional sources) ---
+    # --- Source 6: Roblox Charts (official explore API) ---
+    chart_ids: set[int] = set()
+    chart_games: list[dict] = []
     if ENABLE_ROBLOX_CHARTS:
         try:
-            third_party = await get_third_party_trending(session)
-            all_games.extend(third_party)
-            logger.info("Third-party trending: %d games", len(third_party))
+            chart_games = await get_charts_trending(session)
+            all_games.extend(chart_games)
+            chart_ids = {g["id"] for g in chart_games if g.get("id")}
+            logger.info("Roblox Charts: %d games", len(chart_games))
         except Exception as exc:
-            logger.warning("Third-party trending failed: %s", exc)
+            logger.warning("Roblox Charts fetch failed: %s", exc)
 
-    # Deduplicate and return
+    # Deduplicate and return. Chart membership is stamped after the merge:
+    # dedupe keeps only one stub per id, so a game found first by keyword
+    # search would otherwise lose the fact that it is also on a chart.
     unique = remove_duplicates(all_games)
+    # The rank fields live on the chart stub — but dedupe may have kept the
+    # keyword-search stub instead. Merge them across explicitly, or an
+    # on-charts game reaches the filters with on_charts=True and no rank
+    # (the same failure mode the on_charts stamp exists to prevent).
+    chart_stub_by_id = {g["id"]: g for g in chart_games if g.get("id")}
+    for game in unique:
+        gid = game.get("id")
+        game["on_charts"] = gid in chart_ids
+        chart_stub = chart_stub_by_id.get(gid)
+        if chart_stub is not None:
+            if chart_stub.get("chart_appearances"):
+                game["chart_appearances"] = chart_stub["chart_appearances"]
+            if chart_stub.get("chart_rank"):
+                game["chart_rank"] = chart_stub["chart_rank"]
+            if chart_stub.get("charts_sort"):
+                game["charts_sort"] = chart_stub["charts_sort"]
+            if chart_stub.get("charts_sort_id"):
+                game["charts_sort_id"] = chart_stub["charts_sort_id"]
+
+    # Record this cycle's chart positions before returning. Discovery is the
+    # only place that knows every game's position within every sort, and
+    # chart_rank.py turns those rows into the rank-delta / best-rank signals
+    # used by scoring and embeds. Best-effort: a local SQLite write must
+    # never be able to fail a scan.
+    try:
+        positions = []
+        for stub in chart_games:
+            for sort_id, label, position in stub.get("chart_appearances") or []:
+                if position:
+                    positions.append((stub["id"], sort_id, label, position))
+        if positions:
+            written = chart_rank.record_positions(positions)
+            logger.info("Chart positions recorded: %d rows", written)
+    except Exception as exc:
+        logger.warning("Chart position recording failed: %s", exc)
+
     logger.info(
-        "Total collected: %d unique games (from %d raw)",
+        "Total collected: %d unique games (from %d raw, %d on Roblox charts)",
         len(unique),
         len(all_games),
+        len(chart_ids),
     )
     return unique
 
@@ -160,16 +201,10 @@ def collect_games():
     """
     # Try async path first
     try:
-        import asyncio
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-        try:
-            async def _run():
-                async with aiohttp.ClientSession() as session:
-                    return await collect_games_async(session)
-            return loop.run_until_complete(_run())
-        finally:
-            loop.close()
+        async def _run():
+            async with aiohttp.ClientSession() as session:
+                return await collect_games_async(session)
+        return asyncio.run(_run())
     except Exception as exc:
         logger.warning("Async collection failed, falling back to sync: %s", exc)
 

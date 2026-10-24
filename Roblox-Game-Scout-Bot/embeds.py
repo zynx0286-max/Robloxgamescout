@@ -2,8 +2,7 @@
 Discord embed builders for the Game Scout alert system.
 
 Every alert embed must include:
-  Game Name, Universe ID, Roblox Game Link, Market Analytics Links
-  (Roblox Charts, RoMonitor Stats, Creator Exchange),
+  Game Name, Universe ID, Roblox Game Link, Market Analytics Links,
   Discord Invite Link, Creator/Group, Current CCU, Total Visits,
   Rating (%), Favorites, Genre, Creation Date, Last Updated,
   Game Thumbnail/Icon, Growth Data (if available),
@@ -15,6 +14,7 @@ from datetime import datetime
 
 import discord
 
+from config import GROWTH_WINDOW_DAYS
 from priority import (
     HIGH as PRIORITY_HIGH,
     MEDIUM as PRIORITY_MEDIUM,
@@ -162,11 +162,38 @@ def create_alert_embed(game: dict, priority: str = None) -> discord.Embed:
     embed.add_field(name="🔄 Last Updated", value=updated, inline=True)
 
     # --- Row 5: Growth Data ---
+    growth_lines = []
     if growth != 0:
+        growth_lines.append(f"Player growth: {growth_str}")
+    ccu_growth_pct = game.get("ccu_growth_pct")
+    visits_growth_pct = game.get("visits_growth_pct")
+    history_days = game.get("history_days") or GROWTH_WINDOW_DAYS
+    if ccu_growth_pct is not None:
+        growth_lines.append(f"{history_days}d CCU: {ccu_growth_pct:+.1f}%")
+    if visits_growth_pct is not None:
+        growth_lines.append(f"{history_days}d visits: {visits_growth_pct:+.1f}%")
+    # Chart rank — where the game sits on a Roblox chart this cycle, whether
+    # it is climbing, and its best-ever position (all from the bot's own
+    # chart_positions store; unknown/absent renders nothing rather than 0).
+    chart_rank_value = game.get("chart_rank")
+    if chart_rank_value:
+        chart_label = game.get("charts_sort") or "Roblox chart"
+        chart_bits = [f"#{chart_rank_value} on {chart_label}"]
+        rank_delta = game.get("chart_rank_delta")
+        if isinstance(rank_delta, int):
+            if rank_delta > 0:
+                chart_bits.append(f"▲{rank_delta} vs last cycle")
+            elif rank_delta < 0:
+                chart_bits.append(f"▼{-rank_delta} vs last cycle")
+        chart_best = game.get("chart_best")
+        if isinstance(chart_best, int) and chart_best < chart_rank_value:
+            chart_bits.append(f"best #{chart_best}")
+        growth_lines.append("Chart: " + " · ".join(chart_bits))
+    if growth_lines:
+        growth_lines.append(f"Trend score: {game.get('trend_score', 'N/A')}/100")
         embed.add_field(
             name="📊 Growth Data",
-            value=f"Player growth: {growth_str}\n"
-                  f"Trend score: {game.get('trend_score', 'N/A')}/100",
+            value="\n".join(growth_lines),
             inline=False,
         )
 
@@ -204,21 +231,39 @@ def create_tracker_embed(
     visits_delta: float,
     tracked_since: str,
     priority: str = None,
+    game_id: int = None,
+    place_id: int = None,
+    ccu_growth_pct: float = None,
+    history_days: int = None,
+    chart_summary: str = None,
+    alert_kind: str = "growth",
 ) -> discord.Embed:
     """
     Build an embed for a tracked-game CCU/visits alert.
 
     Used by commands.py /testtracker and the tracker module.
+    ``alert_kind`` is ``"growth"`` (default) or ``"decline"`` — a collapse
+    gets its own colour and wording instead of reading as good news.
     """
-    if priority == PRIORITY_HIGH:
-        color = discord.Color.gold()
-        title = f"🚨 BREAKOUT DETECTED: {game_name}"
-    elif priority == PRIORITY_MEDIUM:
-        color = discord.Color.orange()
-        title = f"📈 GROWING OPPORTUNITY: {game_name}"
+    if alert_kind == "decline":
+        change_emoji = "📉"
+        if priority == PRIORITY_HIGH:
+            color = discord.Color.red()
+            title = f"🚨 COLLAPSE DETECTED: {game_name}"
+        else:
+            color = discord.Color.dark_orange()
+            title = f"📉 DECLINING: {game_name}"
     else:
-        color = discord.Color.green()
-        title = f"📊 Tracker Alert: {game_name}"
+        change_emoji = "📈"
+        if priority == PRIORITY_HIGH:
+            color = discord.Color.gold()
+            title = f"🚨 BREAKOUT DETECTED: {game_name}"
+        elif priority == PRIORITY_MEDIUM:
+            color = discord.Color.orange()
+            title = f"📈 GROWING OPPORTUNITY: {game_name}"
+        else:
+            color = discord.Color.green()
+            title = f"📊 Tracker Alert: {game_name}"
 
     embed = discord.Embed(
         title=title,
@@ -240,7 +285,7 @@ def create_tracker_embed(
         inline=True,
     )
     embed.add_field(
-        name="📈 Player Change",
+        name=f"{change_emoji} Player Change",
         value=f"{players_delta:+.1f}%",
         inline=True,
     )
@@ -256,7 +301,7 @@ def create_tracker_embed(
         inline=True,
     )
     embed.add_field(
-        name="📈 Visit Change",
+        name=f"{change_emoji} Visit Change",
         value=f"{visits_delta:+.1f}%",
         inline=True,
     )
@@ -266,6 +311,26 @@ def create_tracker_embed(
         value=tracked_since,
         inline=False,
     )
+
+    if game_id:
+        link_id = place_id or game_id
+        embed.add_field(
+            name="🔗 Game Links",
+            value=f"[Roblox](https://www.roblox.com/games/{link_id})",
+            inline=False,
+        )
+        if ccu_growth_pct is not None:
+            embed.add_field(
+                name=f"📈 {history_days or GROWTH_WINDOW_DAYS}d CCU Trend (tracked)",
+                value=f"{ccu_growth_pct:+.1f}%",
+                inline=False,
+            )
+        if chart_summary:
+            embed.add_field(
+                name="📊 Chart Rank",
+                value=chart_summary,
+                inline=False,
+            )
 
     embed.set_footer(
         text=f"Tracker Alert | {time.strftime('%Y-%m-%d %H:%M:%S UTC')}",

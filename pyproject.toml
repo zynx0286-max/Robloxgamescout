@@ -4,3 +4,8 @@ version = "0.1.0"
 description = "Add your description here"
 requires-python = ">=3.11"
 dependencies = []
+
+[tool.pytest.ini_options]
+# A bare `pytest` from the repo root runs the bot's suite.
+testpaths = ["Roblox-Game-Scout-Bot/tests"]
+addopts = "-q"

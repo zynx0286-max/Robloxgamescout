@@ -35,8 +35,16 @@ def test_default_user_filters_match_acquisition_requirements(tmp_path):
         assert user_filters["maximum_players"] == 2500
         assert user_filters["minimum_growth"] == 0
         assert user_filters["minimum_rating"] == 75
-        assert user_filters["require_discord"] is True
-        assert user_filters["require_market_links"] is True
+        # Discord is no longer required by default: Roblox's social-link APIs
+        # now return HTTP 401, so an invite is only visible in the game
+        # description and requiring it would suppress every alert.
+        assert user_filters["require_discord"] is False
+        # Replaced the old require_market_links option, which could never
+        # filter anything once the third-party links were removed.
+        assert user_filters["require_charts"] is False
+        # "No cap": the historical default of 365 days was never enforced, so
+        # enforcing it now would drop most of the catalogue from /scan.
+        assert user_filters["max_age"] == 0
     finally:
         config.DATABASE_PATH = original_config_path
         database.DATABASE = original_database_path

@@ -1,0 +1,61 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  tests:
+    name: Full test suite + perf guard
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        working-directory: Roblox-Game-Scout-Bot
+        run: pip install -r requirements.txt
+
+      - name: Import smoke test (catches broken modules before tests do)
+        working-directory: Roblox-Game-Scout-Bot
+        run: |
+          python -c "import database, scanner, tracker, scheduler, \
+            ascent, chart_rank, velocity, history, scorecard, ledger, \
+            portfolio_api, portfolio_worker; print('imports OK')"
+
+      - name: Full test suite (+ perf guard + coverage)
+        # tests/test_perf_guard.py is part of the suite: it re-times the
+        # bulk vs per-game read paths on its own synthetic store and
+        # checks them against the committed per-phase ratios in
+        # tests/perf_baseline.json (each phase must retain >= 10% of the
+        # recorded speedup; one order of magnitude). The ratios are
+        # self-relative (both paths timed back-to-back on the same data),
+        # so slower CI VMs are fine. If a future ratio legitimately
+        # changes with new code, recommit the baseline with:
+        #   python scripts/bench_bulk_reads.py --record
+        working-directory: Roblox-Game-Scout-Bot
+        run: |
+          pip install pytest-cov
+          python -m pytest tests/ -q -p no:warnings \
+            --cov=. --cov-report=term-missing --cov-report=xml
+
+      - name: Generated stress-matrix doc is fresh
+        # CONTRIBUTING's measured tables are rendered, never typed — and
+        # the generator has fixed seeds, so a fresh sweep must reproduce
+        # the committed block byte for byte. --check fails the build when
+        # it does not (hand-edited numbers, or a doc left behind after a
+        # change to the functions under test).
+        working-directory: Roblox-Game-Scout-Bot
+        run: |
+          python scripts/trend_stress_test.py --refit --csv "$RUNNER_TEMP/trend.csv"
+          python scripts/render_stress_matrix.py --check "$RUNNER_TEMP/trend.csv"
+
+      - name: Upload coverage report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage
+          path: Roblox-Game-Scout-Bot/coverage.xml

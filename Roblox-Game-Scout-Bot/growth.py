@@ -5,9 +5,18 @@ from config import DATABASE_PATH
 DATABASE = DATABASE_PATH
 
 
+def _connect(path):
+    """Open the shared SQLite file under the sqlite_conn contract."""
+    import sqlite_conn
+
+    conn = sqlite3.connect(path)
+    sqlite_conn.tune(conn)
+    return conn
+
+
 def get_growth(game_id):
     """Return player growth percentage between the last two snapshots."""
-    conn = sqlite3.connect(DATABASE)
+    conn = _connect(DATABASE)
     cursor = conn.cursor()
 
     cursor.execute("""

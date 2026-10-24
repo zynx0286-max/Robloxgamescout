@@ -7,6 +7,7 @@ Supports both legacy sync and new async+concurrent modes.
 
 import asyncio
 import logging
+import os
 import time
 from typing import Optional
 
@@ -14,24 +15,55 @@ import aiohttp
 
 from data_collector import collect_games, collect_games_async
 from roblox_api import get_game_info
-from roblox_api_async import fetch_game_details_batch
-from database import save_game_snapshot
+from roblox_api_async import (
+    enrich_games_with_ratings,
+    enrich_games_with_thumbnails,
+    fetch_game_details_batch,
+)
+from database import save_game_snapshot, save_game_snapshots_bulk
 from growth import get_growth
+from history import growth_summary, growth_summaries_bulk as history_growth_bulk
 from trend import calculate_trend_score
-from filters import passes_alert_filters, passes_filters
+from filters import passes_alert_filters, without_discord, format_rejection_summary
+import chart_rank
+from discord_lookup import find_discord_invite
 from developer_intelligence import calculate_developer_score
-from velocity import compute_velocity, get_trending_score_from_velocity
+from velocity import (
+    compute_velocity,
+    compute_velocities_bulk,
+    get_trending_score_from_velocity,
+)
 from config import MAX_CONCURRENT_FETCHES
 
 logger = logging.getLogger("scanner")
 
 DEBUG_LOG = "scan_debug.log"
+DEBUG_LOG_MAX_BYTES = 5 * 1024 * 1024  # 5 MB before rotation
 
 
 def _log(message):
-    """Append a debug line to the scan log file."""
-    with open(DEBUG_LOG, "a") as f:
-        f.write(f"{time.strftime('%Y-%m-%d %H:%M:%S')} {message}\n")
+    """Append a debug line to the scan log file.
+
+    Explicit UTF-8 with replacement, and never raises. Game names are full of
+    emoji, and the default encoding on Windows (cp1252) cannot encode them —
+    that UnicodeEncodeError used to propagate out of the scan loop and abort
+    the entire cycle the moment a rejected game had an emoji in its name.
+    A debug log must not be able to kill a scan.
+
+    Also size-capped: the bot runs 24/7 on a small host, and an append-only
+    log growing forever eventually fills the disk. At the cap the file is
+    rotated to ``scan_debug.log.1`` (one generation kept).
+    """
+    try:
+        try:
+            if os.path.getsize(DEBUG_LOG) >= DEBUG_LOG_MAX_BYTES:
+                os.replace(DEBUG_LOG, DEBUG_LOG + ".1")
+        except OSError:
+            pass  # file missing or locked — appending still works
+        with open(DEBUG_LOG, "a", encoding="utf-8", errors="replace") as f:
+            f.write(f"{time.strftime('%Y-%m-%d %H:%M:%S')} {message}\n")
+    except Exception:
+        pass
 
 
 def calculate_score(game):
@@ -67,13 +99,37 @@ def calculate_score(game):
     return score
 
 
+# filter_diagnostics key -> cumulative counter in the scan diagnostics block.
+_DIAGNOSTIC_COUNTERS = (
+    ("ccu_pass", "ccu_passes"),
+    ("visits_pass", "visits_passes"),
+    ("rating_pass", "rating_passes"),
+    ("discord_present", "discord_present"),
+    ("charts_present", "charts_present"),
+    ("genre_pass", "genre_passes"),
+    ("age_pass", "age_passes"),
+    ("market_links_present", "market_links_present"),
+)
+
+
 def _build_filter_diagnostics(game: dict, failures: list[str]) -> dict:
-    """Return per-game filter diagnostics without changing the existing filter logic."""
+    """Derive per-check pass/fail flags from the failure reasons.
+
+    Prefixes rather than substring matches: "Genre 'x' does not match 'y'"
+    must not be confused with any other reason that happens to contain the
+    word "genre".
+    """
+    def _passed(prefix: str) -> bool:
+        return not any(reason.startswith(prefix) for reason in failures)
+
     return {
-        "ccu_pass": not any(reason.startswith("CCU") for reason in failures),
-        "visits_pass": not any(reason.startswith("Visits") for reason in failures),
-        "rating_pass": not any(reason.startswith("Rating") for reason in failures),
+        "ccu_pass": _passed("CCU"),
+        "visits_pass": _passed("Visits"),
+        "rating_pass": _passed("Rating"),
         "discord_present": bool(game.get("discord_invite")),
+        "charts_present": bool(game.get("on_charts")),
+        "genre_pass": _passed("Genre"),
+        "age_pass": _passed("Age"),
         "market_links_present": bool(game.get("market_links")),
     }
 
@@ -168,14 +224,27 @@ async def calculate_scout_score(game):
         like_pts, like_text = 0, "❤️ Favorites not yet tracked"
     breakdown.append(("❤️ Like ratio", like_pts, like_text))
 
-    # 🚀 Velocity / Trending (0-20 — NEW)
+    # 🚀 Velocity / Trending (0-20)
+    # get_trending_score_from_velocity returns a 0-100 index — scale it into
+    # this component's 0-20 budget, or the totals of every fast-growing game
+    # overflow their component caps and the 100-point clamp silently
+    # flattens honest scores.
     velocity = game.get("velocity", {})
     if velocity and velocity.get("snapshot_count", 0) >= 3:
-        trend_pts = get_trending_score_from_velocity(velocity)
+        trend_pts = min(20, round(get_trending_score_from_velocity(velocity) * 20 / 100))
         trend_text = f"🚀 {velocity.get('ccu_trend', 'stable').title()} momentum"
         breakdown.append(("🚀 Velocity", trend_pts, trend_text))
     else:
         breakdown.append(("🚀 Velocity", 0, "📊 Insufficient history"))
+
+    # 📊 Chart rank (0-10)
+    # A game's position on a Roblox chart — and whether it is climbing — is
+    # often the strongest signal available for a brand-new game, which has
+    # neither the velocity history nor the favor rate the older components
+    # feed on.
+    breakdown.append(
+        ("📊 Chart rank", chart_rank.chart_score(game), chart_rank.chart_score_text(game))
+    )
 
     # 👨‍💻 Developer history (0-20 reserve — currently 0 until we add metrics)
     dev_pts, dev_label, dev_text = await _developer_history_points(game)
@@ -245,68 +314,52 @@ async def _fetch_game_details_async(
                 continue
 
         details["source"] = stub.get("source", "Unknown")
+        # Chart membership is decided once, in discovery (data_collector),
+        # against the chart sorts fetched for that cycle. The batch normalizer
+        # builds brand-new dicts, so the flag has to be carried across here or
+        # require_charts sees None for every game and rejects all of them.
+        if "on_charts" in stub:
+            details["on_charts"] = stub["on_charts"]
+        if stub.get("charts_sort"):
+            details["charts_sort"] = stub["charts_sort"]
+        # Chart-rank fields travel the same road as on_charts: the batch
+        # normalizer builds fresh dicts, so anything discovery learned has
+        # to be re-attached here.
+        if "chart_appearances" in stub:
+            details["chart_appearances"] = stub["chart_appearances"]
+        if stub.get("chart_rank"):
+            details["chart_rank"] = stub["chart_rank"]
+        if stub.get("charts_sort_id"):
+            details["charts_sort_id"] = stub["charts_sort_id"]
         enriched.append(details)
 
     return enriched
 
 
 def scan_games(user_settings=None):
-    """Scan games from all sources, filter, save snapshots, and rank."""
-    _log("scan_games started")
+    """Legacy sync entry point — thin wrapper over scan_games_async.
 
-    if user_settings is None:
-        user_settings = {
-            "minimum_visits": 0,
-            "minimum_players": 0,
-            "minimum_growth": 0,
-        }
+    The historical implementation called asyncio.run(get_game_info(...))
+    once per game inside a loop, spinning up and tearing down an event loop
+    for every single game (and raising RuntimeError when a loop was already
+    running). The async pipeline fetches in batches and is dramatically
+    faster, so this wrapper just delegates to it.
+    """
+    _log("scan_games (legacy wrapper) started")
 
-    _log(f"settings: {user_settings}")
+    async def _run():
+        async with aiohttp.ClientSession() as session:
+            return await scan_games_async(session, user_settings=user_settings)
 
-    found_games = []
-
-    # Collect game stubs from all sources (now returns 150-500+ games)
-    games = collect_games()
-    _log(f"collected {len(games)} game stubs")
-
-    for game in games:
-        _log(f"processing game id={game.get('id')}")
-        info = get_game_info(game["id"])
-        _log(f"get_game_info result: {info is not None}")
-
-        if info is None:
-            continue
-
-        info["source"] = game.get("source", "Unknown")
-        save_game_snapshot(info)
-        _log(f"saved snapshot for {info['name']}")
-
-        growth = get_growth(info["id"])
-        info["growth"] = growth
-        info["trend_score"] = calculate_trend_score(info, growth)
-        _log(f"growth={growth}, trend_score={info['trend_score']}")
-
-        # Compute velocity metrics from historical data
-        try:
-            velocity = compute_velocity(info["id"])
-            info["velocity"] = velocity
-        except Exception as exc:
-            _log(f"velocity computation failed: {exc}")
-            info["velocity"] = {}
-
-        if passes_filters(info, user_settings):
-            _log(f"passes filters, adding {info['name']}")
-            found_games.append(info)
-        else:
-            _log(
-                f"filtered out: visits={info['visits']}, "
-                f"players={info['playing']}, growth={info['growth']}"
-            )
-
-    _log(f"found {len(found_games)} games before ranking")
-    ranked = rank_games(found_games)
-    _log(f"returning {len(ranked)} ranked games")
-    return ranked
+    try:
+        return asyncio.run(_run())
+    except RuntimeError as exc:
+        # asyncio.run() cannot be nested inside a running event loop.
+        logger.error(
+            "scan_games() is synchronous and cannot run inside an event "
+            "loop (%s). Use scan_games_async() instead.", exc
+        )
+        raise
 
 
 async def scan_games_async(
@@ -350,51 +403,125 @@ async def scan_games_async(
     enriched = await _fetch_game_details_async(session, game_stubs)
     _log(f"enriched {len(enriched)} games")
 
-    # Step 3: Process each game (growth, trend, velocity, filtering)
-    found_games = []
+    # Step 2b: Bulk ratings + thumbnails — one request per 100 games each.
+    # This has to happen HERE, before the filters below, because the rating
+    # filter rejects any game without rating data. Enriching after the scan
+    # returned (as the scheduler used to) meant every candidate was judged
+    # unrated and the scan came back empty no matter what.
+    try:
+        await enrich_games_with_ratings(session, enriched)
+        await enrich_games_with_thumbnails(session, enriched)
+    except Exception as exc:
+        logger.warning("Batch enrichment failed: %s", exc)
+
+    # Step 3: Process each game (snapshot, growth, trend, velocity) and run
+    # the cheap filters.
+    #
+    # The Discord requirement is deliberately suspended for this pass: the
+    # lookup costs two extra Roblox requests per game, and a game that fails
+    # CCU/visits/rating/age would never alert regardless. Step 4 does the
+    # lookup for survivors only, then applies the profile in full.
+    candidates = []
+    all_rejections: list[list[str]] = []
     diagnostics = {
         "total_collected": len(enriched),
         "ccu_passes": 0,
         "visits_passes": 0,
         "rating_passes": 0,
         "discord_present": 0,
+        "charts_present": 0,
+        "genre_passes": 0,
+        "age_passes": 0,
         "market_links_present": 0,
         "final_matches": 0,
     }
+    # Snapshot every collected game in ONE transaction before the per-game
+    # loop: a scan writes ~150 rows, and one commit per row was ~150 fsyncs
+    # per cycle. The per-game loop below then reads growth/velocity from
+    # this fresh history exactly as before.
+    try:
+        save_game_snapshots_bulk(enriched)
+    except Exception as exc:
+        logger.warning("Bulk snapshot write failed (%s) — falling back per game", exc)
+        for fallback_info in enriched:
+            try:
+                save_game_snapshot(fallback_info)
+            except Exception:
+                continue
+
+    # Bulk local reads: growth-over-window and 72h velocity for every
+    # candidate in one indexed query each — previously one connection +
+    # query per game per metric (~300 connection setups/cycle at default
+    # volume). Identical math, one read each; per-game helpers remain for
+    # commands that look up a single game.
+    all_ids = [info["id"] for info in enriched if info.get("id") is not None]
+    try:
+        bulk_growth = history_growth_bulk(all_ids)
+    except Exception as exc:
+        logger.warning("Bulk growth read failed (%s) — falling back per game", exc)
+        bulk_growth = {}
+    try:
+        bulk_velocity = compute_velocities_bulk(all_ids)
+    except Exception as exc:
+        logger.warning("Bulk velocity read failed (%s) — falling back per game", exc)
+        bulk_velocity = {}
+    # Chart-rank signals: same bulk shape — two indexed queries for the
+    # whole cycle instead of one connection + two queries per charted game.
+    try:
+        chart_rank.attach_rank_signals_bulk(enriched)
+    except Exception as exc:
+        logger.warning(
+            "Bulk chart-rank read failed (%s) — falling back per game", exc
+        )
+        for info in enriched:
+            try:
+                chart_rank.attach_rank_signal(info)
+            except Exception as per_game_exc:
+                logger.debug(
+                    "Chart rank lookup failed for %s: %s",
+                    info.get("id"), per_game_exc,
+                )
+
     for info in enriched:
         try:
-            # Save snapshot to history
-            save_game_snapshot(info)
-
             # Compute growth from last two snapshots
-            growth = get_growth(info["id"])
+            growth = bulk_growth.get(info["id"], get_growth(info["id"]))
             info["growth"] = growth
             info["trend_score"] = calculate_trend_score(info, growth)
 
-            # Compute velocity from historical data
+            # Velocity from the bulk read (falls back per game only if the
+            # bulk pass above failed entirely).
+            velocity = bulk_velocity.get(info["id"])
+            if velocity is None:
+                try:
+                    velocity = compute_velocity(info["id"])
+                except Exception:
+                    velocity = {}
+            info["velocity"] = velocity
+
+            # Chart-rank signal: this cycle's position, movement vs the
+            # previous cycle, and best-ever rank — from the bot's own
+            # chart_positions store (written during discovery). A local
+            # indexed read, so a charted game costs no network request.
             try:
-                velocity = compute_velocity(info["id"])
-                info["velocity"] = velocity
-            except Exception:
-                info["velocity"] = {}
+                chart_rank.attach_rank_signal(info)
+            except Exception as exc:
+                logger.debug("Chart rank lookup failed for %s: %s", info.get("id"), exc)
 
-            passed, failures = passes_alert_filters(info)
+            # Base thresholds plus the caller's /settings profile, minus the
+            # Discord check (see above).
+            passed, failures = passes_alert_filters(
+                info, without_discord(user_settings)
+            )
             filter_diagnostics = _build_filter_diagnostics(info, failures)
-            if filter_diagnostics["ccu_pass"]:
-                diagnostics["ccu_passes"] += 1
-            if filter_diagnostics["visits_pass"]:
-                diagnostics["visits_passes"] += 1
-            if filter_diagnostics["rating_pass"]:
-                diagnostics["rating_passes"] += 1
-            if filter_diagnostics["discord_present"]:
-                diagnostics["discord_present"] += 1
-            if filter_diagnostics["market_links_present"]:
-                diagnostics["market_links_present"] += 1
+            for diag_key, counter_key in _DIAGNOSTIC_COUNTERS:
+                if filter_diagnostics.get(diag_key):
+                    diagnostics[counter_key] += 1
 
-            # Apply user filters
-            if passes_filters(info, user_settings):
-                found_games.append(info)
+            if passed:
+                candidates.append(info)
             else:
+                all_rejections.append(failures)
                 reason_text = " | ".join(failures) if failures else "unknown filter failure"
                 _log(f"rejected game {info.get('id')} ({info.get('name')}): {reason_text}")
                 logger.info("SCAN REJECTED: %s — %s", info.get("name", info.get("id")), reason_text)
@@ -402,11 +529,77 @@ async def scan_games_async(
             _log(f"error processing game {info.get('id')}: {exc}")
             continue
 
-    # Step 4: Rank by Scout Score
+    # Step 4: Resolve Discord invites for the survivors, then apply the full
+    # profile — the same one /profile prints — so require_discord means what
+    # it says. (This path never populated discord_invite before, which is why
+    # /scan returned nothing at all under the default profile.)
+    try:
+        survivor_growth = history_growth_bulk(
+            [c["id"] for c in candidates if c.get("id") is not None]
+        )
+    except Exception:
+        survivor_growth = {}
+    found_games = []
+    for info in candidates:
+        try:
+            invite = await find_discord_invite(
+                session,
+                universe_id=info.get("id", 0),
+                game_description=info.get("description", ""),
+                creator_id=info.get("creator_id"),
+                creator_type=info.get("creator_type"),
+            )
+            if invite:
+                info["discord_invite"] = invite
+                diagnostics["discord_present"] += 1
+        except Exception as exc:
+            logger.debug("Discord lookup failed for %s: %s", info.get("name"), exc)
+
+        passed, failures = passes_alert_filters(info, user_settings)
+        if passed:
+            # Attach the tracked-window growth figures the embeds render, from
+            # the bulk survivor read above (one indexed query for all);
+            # per-game fallback keeps behavior identical if it failed.
+            summary = survivor_growth.get(info["id"])
+            if not summary:
+                try:
+                    summary = growth_summary(info["id"])
+                except Exception as exc:
+                    logger.debug("History lookup failed for %s: %s", info.get("id"), exc)
+                    summary = {}
+            info.update(summary)
+            found_games.append(info)
+        else:
+            all_rejections.append(failures)
+            reason_text = " | ".join(failures) if failures else "unknown filter failure"
+            _log(f"rejected game {info.get('id')} ({info.get('name')}): {reason_text}")
+            logger.info(
+                "SCAN REJECTED (post-enrichment): %s — %s",
+                info.get("name", info.get("id")),
+                reason_text,
+            )
+
+    # Step 5: Rank by Scout Score
     _log(f"found {len(found_games)} games before ranking")
     ranked = await rank_games(found_games)
     diagnostics["final_matches"] = len(ranked)
     _log(f"returning {len(ranked)} ranked games")
+
+    # Silent-empty guard: a scan that matches nothing is almost always a
+    # data bug (ratings never attached, chart flags dropped) rather than a
+    # genuinely empty market — the dominant rejection category names the
+    # culprit. Both historic empty-scan bugs would have been obvious here
+    # on day one instead of surfacing as "why are alerts empty?" weeks later.
+    rejection_note = ""
+    if all_rejections:
+        rejection_note = format_rejection_summary(
+            all_rejections, collected=len(enriched)
+        )
+        if not ranked:
+            logger.warning("SCAN EMPTY — %s", rejection_note)
+            _log(f"scan matched 0 of {len(enriched)} games: {rejection_note}")
+    diagnostics["rejection_note"] = rejection_note
+
     if return_diagnostics:
         return ranked, diagnostics
     return ranked

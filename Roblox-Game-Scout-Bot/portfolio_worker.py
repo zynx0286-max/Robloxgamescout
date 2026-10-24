@@ -21,7 +21,7 @@ from config import PORTFOLIO_WORKER_INTERVAL
 from portfolio_db import (
     create_portfolio_tables,
     list_portfolio_games,
-    record_game_snapshot,
+    record_game_snapshots_bulk,
     update_portfolio_game,
 )
 
@@ -153,6 +153,10 @@ async def collect_portfolio(session=None):
         votes = await _fetch_votes(session, universe_ids)
         thumbnails = await _fetch_thumbnails(session, universe_ids)
 
+        # The tick's snapshot rows are written in ONE transaction (was:
+        # one connection + commit per game). Thumbnails stay per-game —
+        # they only write when a game lacks a cached URL.
+        pending = []
         for game in games:
             uid = game["game_id"]
             detail = details.get(uid)
@@ -160,18 +164,22 @@ async def collect_portfolio(session=None):
                 errors += 1
                 continue
             up, down = votes.get(uid, (0, 0))
-            record_game_snapshot(
-                uid,
-                detail["playing"],
-                detail["visits"],
-                favorites=detail["favorites"],
-                likes=up,
-                dislikes=down,
-            )
+            pending.append((
+                uid, detail["playing"], detail["visits"],
+                detail["favorites"], up, down,
+            ))
             # Keep the thumbnail cache warm so the API never fetches it.
             if not game["thumbnail_url"] and uid in thumbnails:
                 update_portfolio_game(uid, thumbnail_url=thumbnails[uid])
             collected += 1
+        if pending:
+            try:
+                record_game_snapshots_bulk(pending)
+            except Exception:
+                import logging
+                logging.getLogger("portfolio_worker").exception(
+                    "Bulk snapshot write failed for %d row(s)", len(pending)
+                )
     finally:
         if own_session:
             await session.close()

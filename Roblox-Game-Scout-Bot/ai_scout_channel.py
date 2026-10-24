@@ -46,6 +46,15 @@ AI_SCOUT_ID_ENV = "AI_SCOUT_ID"  # legacy alias from initial secret add.
 HISTORY_CAP = 12  # store last 12 turns (6 user + 6 assistant)
 HISTORY_INCLUDE_LAST = 8  # include last 8 turns in prompt to keep it tight
 
+
+def _connect(path):
+    """Open the shared SQLite file under the sqlite_conn contract."""
+    import sqlite_conn
+
+    conn = sqlite3.connect(path)
+    sqlite_conn.tune(conn)
+    return conn
+
 _DIGIT_RE = re.compile(r"\b\d{5,}\b")
 _MENTION_RE = re.compile(r"<@!?\d+>")
 
@@ -65,7 +74,7 @@ def resolve_ai_channel_id():
 
 def _ensure_history_table():
     """Create the conversation history table + index if missing."""
-    conn = sqlite3.connect(DATABASE)
+    conn = _connect(DATABASE)
     cursor = conn.cursor()
     cursor.execute("""
     CREATE TABLE IF NOT EXISTS ai_chat_history (
@@ -87,7 +96,7 @@ def _ensure_history_table():
 def _history_append(channel_id, role, content):
     """Append a turn to the channel's history. Truncate content defensively."""
     _ensure_history_table()
-    conn = sqlite3.connect(DATABASE)
+    conn = _connect(DATABASE)
     cursor = conn.cursor()
     cursor.execute(
         """
@@ -103,7 +112,7 @@ def _history_append(channel_id, role, content):
 def _history_recent(channel_id, limit):
     """Return up to `limit` most-recent (role, content) tuples, oldest first."""
     _ensure_history_table()
-    conn = sqlite3.connect(DATABASE)
+    conn = _connect(DATABASE)
     cursor = conn.cursor()
     cursor.execute("""
     SELECT role, content FROM ai_chat_history
@@ -118,7 +127,7 @@ def _history_recent(channel_id, limit):
 def _history_prune(channel_id, keep):
     """Trim stored history so only ``keep`` most-recent turns remain."""
     _ensure_history_table()
-    conn = sqlite3.connect(DATABASE)
+    conn = _connect(DATABASE)
     cursor = conn.cursor()
     cursor.execute("""
     DELETE FROM ai_chat_history
@@ -149,7 +158,9 @@ def _is_bot_mentioned(message, bot_user_id):
 async def _handle_analyze_path(universe_id):
     """Fetch + score + run analyze_game and return the formatted report."""
     try:
-        info = await asyncio.to_thread(get_game_info, str(universe_id))
+        # get_game_info is natively async — call it directly on the loop.
+        # (to_thread would await nothing and raise "coroutine was never awaited".)
+        info = await get_game_info(str(universe_id))
     except Exception as exc:
         logger.exception("Failed fetching game info for %s", universe_id)
         return f"⚠️ Failed to fetch game info: `{exc}`"
@@ -166,7 +177,10 @@ async def _handle_analyze_path(universe_id):
     info["trend_score"] = calculate_trend_score(info, growth)
 
     # analyze_game handles cache + quota gate + fallback internally.
-    analysis = analyze_game(info, force_refresh=False)
+    # It is blocking (requests + retries), so run it off the event loop —
+    # same as every other analyze_game call site. A bare call here stalls
+    # the bot's heartbeats for the whole AI round-trip.
+    analysis = await asyncio.to_thread(analyze_game, info, force_refresh=False)
     return format_report(info["name"], analysis)
 
 

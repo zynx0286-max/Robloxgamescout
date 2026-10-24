@@ -1,19 +1,30 @@
 """
 Roblox Search API client.
 
-Provides keyword-based game discovery using multiple Roblox API endpoints
-as fallbacks. The primary search endpoint (/v1/games/list) is known to return
-404 on some routes, so we try several strategies:
-  1. /v1/games/list with sortField=Updated (trending)
-  2. /v1/games/list with sortField=Visits (popular)
-  3. /v1/games/recommendations from seed games
-  4. /v1/games/list with sortField=Created (new)
+Keyword-based game discovery.
+
+IMPORTANT (2026-09): the legacy discovery endpoints
+`/v1/games/list` (keyword/new/updated sorts) and `/v1/games/recommendations`
+were retired by Roblox — both now return 404 for unauthenticated callers
+(verified live). Discovery is therefore rebuilt on the official search API
+that powers roblox.com/search:
+
+    GET https://apis.roblox.com/search-api/omni-search
+        ?searchQuery={keyword}&pageType=all&sessionId={uuid}
+
+The sessionId is mandatory (any stable UUID) — without it the API returns
+HTTP 200 with empty results. Each hit carries universeId, name, playerCount,
+rootPlaceId, votes, and creator name, so one request fully enriches stubs.
+
+"New games" discovery uses a "new" keyword query because the search API
+exposes no sort parameter. Recommendations are approximated by searching
+for the seed game's name and excluding the seed itself.
 """
 
 import asyncio
 import logging
-import time
 from typing import Optional
+from urllib.parse import quote
 
 import aiohttp
 
@@ -21,8 +32,21 @@ from config import SEARCH_LIMIT_PER_KEYWORD
 
 logger = logging.getLogger("roblox_search")
 
-# Roblox API base
+# Official search API (see module docstring for why games/list is gone).
+_SEARCH_API = "https://apis.roblox.com/search-api/omni-search"
 _GAMES_API = "https://games.roblox.com/v1"
+
+# Random-but-stable session ID required by the search API.
+_SESSION_ID = "4d7b0c2e-6b1f-4e0a-9c3d-8a1f2b4c5d6e"
+
+_HEADERS = {
+    "User-Agent": (
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+        "AppleWebKit/537.36 (KHTML, like Gecko) "
+        "Chrome/120.0.0.0 Safari/537.36"
+    ),
+    "Accept": "application/json",
+}
 
 # Default keyword rotation used when no user query is provided.
 # Covers major Roblox genres/categories.
@@ -37,16 +61,11 @@ DEFAULT_KEYWORDS = [
     "superhero", "zombie", "ninja", "pirate", "space",
 ]
 
-# Sort options supported by Roblox list endpoint
-SORT_NEW = 0       # Created (newest first)
-SORT_UPDATED = 1   # Updated (recently updated first)
-SORT_POPULAR = 2   # Visits (most visited first)
-
 
 async def _fetch_json(session: aiohttp.ClientSession, url: str, timeout: int = 10) -> Optional[dict]:
     """Fetch JSON from a URL with timeout. Returns None on failure."""
     try:
-        async with session.get(url, timeout=aiohttp.ClientTimeout(total=timeout)) as resp:
+        async with session.get(url, headers=_HEADERS, timeout=aiohttp.ClientTimeout(total=timeout)) as resp:
             if resp.status == 200:
                 return await resp.json()
             if resp.status == 429:
@@ -61,43 +80,58 @@ async def _fetch_json(session: aiohttp.ClientSession, url: str, timeout: int = 1
     return None
 
 
+def _normalize_omni_results(data: dict, limit: int) -> list[dict]:
+    """Flatten an omni-search payload into normalized game stubs.
+
+    The payload nests game hits under searchResults[*].contents[]; only the
+    "Game" content group is relevant.
+    """
+    games = []
+    for group in data.get("searchResults") or []:
+        if group.get("contentGroupType") != "Game":
+            continue
+        for item in group.get("contents") or []:
+            uid = item.get("universeId")
+            if not uid:
+                continue
+            games.append({
+                "id": int(uid),
+                "name": item.get("name", "Unknown"),
+                "playing": item.get("playerCount", 0),
+                "visits": 0,
+                "favorites": 0,
+                "up_votes": item.get("totalUpVotes", 0),
+                "down_votes": item.get("totalDownVotes", 0),
+                "creator": item.get("creatorName", "Unknown"),
+                "place_id": item.get("rootPlaceId") or uid,
+                "source": "RobloxSearch",
+            })
+            if len(games) >= limit:
+                return games
+    return games
+
+
 async def search_keyword(
     session: aiohttp.ClientSession,
     keyword: str,
     limit: int = SEARCH_LIMIT_PER_KEYWORD,
-    sort_order: int = SORT_POPULAR,
+    sort_order: int = None,  # unused; kept for call-site compatibility
 ) -> list[dict]:
     """
-    Search Roblox games by keyword.
-
-    Uses /v1/games/list with keyword, limit, and sort parameters.
-    Falls back to /v1/games/list with keyword but no sort if the sorted
-    variant fails.
+    Search Roblox games by keyword via the omni-search API.
 
     Returns a list of game dicts with at minimum {"id": universe_id}.
     """
     url = (
-        f"{_GAMES_API}/games/list"
-        f"?model.keyword={_safe_keyword(keyword)}"
-        f"&model.limit={min(limit, 30)}"
-        f"&model.sortOrder=1"  # Descending
-        f"&model.sortField={sort_order}"
+        f"{_SEARCH_API}"
+        f"?searchQuery={quote(keyword.strip(), safe='')}"
+        f"&pageType=all"
+        f"&sessionId={_SESSION_ID}"
     )
 
     data = await _fetch_json(session, url)
-    if data and data.get("data"):
-        return _normalize_results(data["data"])
-
-    # Fallback: try without sort (some Roblox deployments don't support sort)
-    fallback_url = (
-        f"{_GAMES_API}/games/list"
-        f"?model.keyword={_safe_keyword(keyword)}"
-        f"&model.limit={min(limit, 30)}"
-    )
-    data = await _fetch_json(session, fallback_url)
-    if data and data.get("data"):
-        return _normalize_results(data["data"])
-
+    if data and data.get("searchResults"):
+        return _normalize_omni_results(data, limit=max(limit, 1))
     return []
 
 
@@ -106,19 +140,13 @@ async def search_new_games(
     limit: int = 30,
 ) -> list[dict]:
     """
-    Fetch most recently created games (new releases).
-    Uses sortField=Created (SORT_NEW = 0).
+    Fetch recently-created games.
+
+    The search API exposes no sort parameter (the old sortField=Created
+    endpoint is retired), so this queries the "new" keyword as the closest
+    available approximation.
     """
-    url = (
-        f"{_GAMES_API}/games/list"
-        f"?model.limit={min(limit, 30)}"
-        f"&model.sortOrder=1"
-        f"&model.sortField={SORT_NEW}"
-    )
-    data = await _fetch_json(session, url)
-    if data and data.get("data"):
-        return _normalize_results(data["data"])
-    return []
+    return await search_keyword(session, "new", limit=limit)
 
 
 async def fetch_recommendations(
@@ -127,21 +155,53 @@ async def fetch_recommendations(
     limit: int = 30,
 ) -> list[dict]:
     """
-    Fetch game recommendations based on seed universe IDs.
+    Fetch games similar to the seed games.
 
-    POST /v1/games/recommendations?model.universeIds={ids}
+    The /v1/games/recommendations endpoint is retired, so similarity is
+    approximated: look up the first seed's name, search for it, and exclude
+    the seed itself. Returns [] if the seed lookup fails.
     """
     if not seed_ids:
         return []
 
-    url = (
-        f"{_GAMES_API}/games/recommendations"
-        f"?model.universeIds={','.join(str(i) for i in seed_ids[:10])}"
-    )
-    data = await _fetch_json(session, url)
-    if data and data.get("data"):
-        return _normalize_results(data["data"])
-    return []
+    try:
+        async with session.get(
+            f"{_GAMES_API}/games?universeIds={int(seed_ids[0])}",
+            timeout=aiohttp.ClientTimeout(total=10),
+        ) as resp:
+            if resp.status != 200:
+                return []
+            data = await resp.json()
+            entries = data.get("data") or []
+            seed_name = entries[0].get("name") if entries else None
+    except Exception as exc:
+        logger.debug("Seed name lookup failed: %s", exc)
+        return []
+
+    if not seed_name:
+        return []
+
+    results = await search_keyword(session, seed_name, limit=limit + 1)
+    return [g for g in results if g.get("id") != int(seed_ids[0])][:limit]
+
+
+def _merge_game_lists(lists: list, max_total: int) -> list[dict]:
+    """Merge search results, deduplicating by game id and capping total.
+
+    Non-list entries (exceptions from asyncio.gather) are logged and skipped.
+    """
+    seen_ids = set()
+    merged = []
+    for res in lists:
+        if isinstance(res, list):
+            for game in res:
+                gid = game.get("id")
+                if gid and gid not in seen_ids:
+                    seen_ids.add(gid)
+                    merged.append(game)
+        elif isinstance(res, Exception):
+            logger.warning("Keyword search failed: %s", res)
+    return merged[:max_total]
 
 
 async def multi_keyword_search(
@@ -149,7 +209,7 @@ async def multi_keyword_search(
     keywords: list[str],
     limit_per_keyword: int = 30,
     max_total: int = 150,
-    sort_order: int = SORT_POPULAR,
+    sort_order: int = None,  # unused; kept for call-site compatibility
 ) -> list[dict]:
     """
     Search multiple keywords concurrently and deduplicate results.
@@ -160,49 +220,8 @@ async def multi_keyword_search(
         return []
 
     tasks = [
-        search_keyword(session, kw, limit=limit_per_keyword, sort_order=sort_order)
+        search_keyword(session, kw, limit=limit_per_keyword)
         for kw in keywords
     ]
     results = await asyncio.gather(*tasks, return_exceptions=True)
-
-    seen_ids = set()
-    merged = []
-    for res in results:
-        if isinstance(res, list):
-            for game in res:
-                gid = game.get("id")
-                if gid and gid not in seen_ids:
-                    seen_ids.add(gid)
-                    merged.append(game)
-        elif isinstance(res, Exception):
-            logger.warning("Keyword search failed: %s", res)
-
-    return merged[:max_total]
-
-
-def _safe_keyword(keyword: str) -> str:
-    """URL-encode a keyword for Roblox API."""
-    from urllib.parse import quote
-    return quote(keyword.strip(), safe="")
-
-
-def _normalize_results(data: list[dict]) -> list[dict]:
-    """Normalize Roblox API search results to our standard format."""
-    games = []
-    for item in data:
-        uid = item.get("universeId") or item.get("id")
-        if not uid:
-            continue
-        games.append({
-            "id": int(uid),
-            "name": item.get("name", "Unknown"),
-            "playing": item.get("playing", 0),
-            "visits": item.get("visits", 0),
-            "favorites": item.get("favoritedCount", 0),
-            "creator": (item.get("creator") or {}).get("name", "Unknown"),
-            "place_id": item.get("rootPlaceId", uid),
-            "created": item.get("created"),
-            "updated": item.get("updated"),
-            "source": "RobloxSearch",
-        })
-    return games
+    return _merge_game_lists(results, max_total)

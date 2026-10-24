@@ -27,6 +27,14 @@ _VALID_PRIORITIES = {HIGH, MEDIUM, LOW}
 # Rank lets us compare tiers numerically without string gymnastics.
 _PRIORITY_RANK = {HIGH: 3, MEDIUM: 2, LOW: 1}
 
+# Settings share the priority scale, so should_mention can compare them
+# directly: "All" accepts even a low-priority mention, "High Only" accepts
+# only a breakout. (This used to reuse _PRIORITY_RANK — but "all" is a
+# SETTING, not a priority, so should_mention(priority, "all") raised
+# KeyError and every tracker/scheduled alert for a default-profile user
+# silently died in its exception handler.)
+_SETTING_RANK = {SETTING_ALL: 1, SETTING_MEDIUM_PLUS: 2, SETTING_HIGH_ONLY: 3}
+
 
 def normalize_setting(value):
     """Coerce a user-supplied setting string to a canonical value.
@@ -63,7 +71,7 @@ def normalize_setting(value):
 
 def setting_rank(setting):
     """Numeric rank for a user setting; higher = stricter."""
-    return _PRIORITY_RANK[normalize_setting(setting)]
+    return _SETTING_RANK[normalize_setting(setting)]
 
 
 def should_mention(priority, setting):

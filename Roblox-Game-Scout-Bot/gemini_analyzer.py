@@ -1,8 +1,17 @@
-"""Gemini AI Analyst v2 — Acquisition-focused opportunity analysis.
+"""AI Analyst v3 — Acquisition-focused opportunity analysis.
 
 Analyzes *why* a game is a good acquisition opportunity.
 Called as part of the alert pipeline, not just on demand.
 Every call is cached in `ai_analysis_cache` for 24h.
+
+Provider selection (config.AI_PROVIDER):
+  - "auto"    (default): Groq (GROQ_API_KEY) if set, else Gemini (GEMINI_API_KEY).
+  - "groq" / "gemini": force one provider.
+
+Groq is a free, OpenAI-compatible inference API (https://groq.com) — no
+credit card, far higher daily limits than Gemini's free tier. The endpoint,
+model, and key are all configurable (AI_BASE_URL / AI_MODEL) so any
+OpenAI-compatible host (Groq, Cerebras, OpenRouter, ...) works unmodified.
 """
 
 import json
@@ -11,14 +20,96 @@ import sqlite3
 import time
 import requests
 
-from config import DATABASE_PATH
+from config import DATABASE_PATH, AI_PROVIDER, AI_BASE_URL, AI_MODEL
 
 DATABASE = DATABASE_PATH
 CACHE_TTL_SECONDS = 86400  # 24h
 GEMINI_API_KEY_ENV = "GEMINI_API_KEY"
+GROQ_API_KEY_ENV = "GROQ_API_KEY"
 GEMINI_DAILY_LIMIT_ENV = "GEMINI_DAILY_LIMIT"
 DEFAULT_DAILY_LIMIT = 50
-GEMINI_MODEL = "gemini-flash-latest"
+GEMINI_MODEL = os.environ.get("GEMINI_MODEL", "gemini-flash-lite-latest")
+
+# Tried in order when the primary model keeps returning a retryable status
+# (429/503). Measured on a free-tier key: gemini-flash-latest returned
+# 0/4 (three 429s and a "high demand" 503) while every flash-lite alias
+# returned 4/4 at ~1s. The flash tier is simply too contended to depend on,
+# so the default model is flash-lite and these are the safety net if even
+# that is busy.
+GEMINI_FALLBACK_MODELS = [
+    m.strip()
+    for m in os.environ.get(
+        "GEMINI_FALLBACK_MODELS",
+        "gemini-3.1-flash-lite,gemini-3.5-flash-lite",
+    ).split(",")
+    if m.strip()
+]
+
+# Status codes that mean "come back in a moment", not "you're wrong".
+# Gemini in particular returns 503 UNAVAILABLE with "This model is
+# currently experiencing high demand" on a large share of calls right
+# now — measured at 3 of 4 in testing — and without a retry every one of
+# those games silently degrades to the "Data Only" fallback verdict.
+# 401/403/404 are deliberately excluded: those are real config errors and
+# retrying them just burns time.
+_RETRYABLE_STATUS = {429, 500, 502, 503, 504}
+AI_MAX_ATTEMPTS = int(os.environ.get("AI_MAX_ATTEMPTS", "4"))
+
+
+def _connect(path):
+    """Open the shared SQLite file under the sqlite_conn contract."""
+    import sqlite_conn
+
+    conn = sqlite3.connect(path)
+    sqlite_conn.tune(conn)
+    return conn
+
+
+def _post_with_retry(url, payload, headers=None, timeout=30, attempts=None):
+    """POST JSON, retrying transient upstream failures with backoff.
+
+    Returns (response, None) on success, or (None, error_string) if every
+    attempt failed. A response is returned for any non-retryable status so
+    the caller can still distinguish 401/403/404 from an overload.
+    """
+    import random
+
+    attempts = attempts or AI_MAX_ATTEMPTS
+    backoff = 1.0
+    last_note = "request failed"
+    for attempt in range(1, max(1, attempts) + 1):
+        try:
+            r = requests.post(url, json=payload, headers=headers or {}, timeout=timeout)
+        except Exception as exc:
+            last_note = f"request failed: {exc}"
+        else:
+            if r.status_code not in _RETRYABLE_STATUS:
+                return r, None
+            last_note = f"HTTP {r.status_code}"
+            if attempt >= attempts:
+                return r, None
+            wait = backoff + random.uniform(0, 0.4)
+            time.sleep(wait)
+            backoff = min(backoff * 2, 8.0)
+            continue
+        # Network-level failure (no response object).
+        if attempt >= attempts:
+            break
+        wait = backoff
+        time.sleep(wait)
+        backoff = min(backoff * 2, 8.0)
+    return None, last_note
+
+
+# Why the last AI call returned None. Purely diagnostic — surfaced in
+# the fallback text so operators see the real cause instead of a generic
+# "key not configured" message.
+_LAST_AI_ERROR = None
+
+# Which provider actually answered the last successful call, or None if the
+# last call failed. Surfaced in the logs so "which provider is actually
+# serving requests right now" is answerable at a glance.
+_LAST_AI_PROVIDER = None
 
 
 VERDICT_QUOTA = "⏸️ Daily Quota Reached"
@@ -36,7 +127,7 @@ VALID_VERDICTS = {
 
 def _ensure_table():
     """Create ai_analysis_cache and gemini_usage tables if missing."""
-    conn = sqlite3.connect(DATABASE)
+    conn = _connect(DATABASE)
     cursor = conn.cursor()
     cursor.execute("""
     CREATE TABLE IF NOT EXISTS ai_analysis_cache (
@@ -75,7 +166,7 @@ def get_daily_limit():
 def get_usage_today():
     """Return the number of Gemini calls made today (UTC)."""
     _ensure_table()
-    conn = sqlite3.connect(DATABASE)
+    conn = _connect(DATABASE)
     cursor = conn.cursor()
     cursor.execute("""
     SELECT COUNT(*) FROM gemini_usage
@@ -94,7 +185,7 @@ def quota_remaining():
 def record_gemini_call(game_id, verdict):
     """Append a row to gemini_usage (idempotent table, append-only)."""
     _ensure_table()
-    conn = sqlite3.connect(DATABASE)
+    conn = _connect(DATABASE)
     cursor = conn.cursor()
     cursor.execute(
         "INSERT INTO gemini_usage (game_id, verdict) VALUES (?, ?)",
@@ -106,7 +197,7 @@ def record_gemini_call(game_id, verdict):
 
 def _cache_get(game_id):
     _ensure_table()
-    conn = sqlite3.connect(DATABASE)
+    conn = _connect(DATABASE)
     cursor = conn.cursor()
     cursor.execute("""
     SELECT verdict, confidence, strengths, risks, recommendation,
@@ -121,7 +212,7 @@ def _cache_get(game_id):
 
 def _cache_put(game_id, payload):
     _ensure_table()
-    conn = sqlite3.connect(DATABASE)
+    conn = _connect(DATABASE)
     cursor = conn.cursor()
     cursor.execute("""
     INSERT INTO ai_analysis_cache
@@ -200,38 +291,280 @@ ACQUISITION_PROMPT_TEMPLATE = (
 )
 
 
+def _active_provider():
+    """Resolve which AI provider to use: 'groq', 'gemini', or None."""
+    chain = _provider_chain()
+    return chain[0] if chain else None
+
+
+def _provider_chain():
+    """Providers to try, in order, for one AI request.
+
+    With both keys set, Groq answers first and Gemini is the backup. The
+    point of the backup is that free tiers go down constantly — a
+    permanently-preferred provider with no escape hatch means one
+    provider's bad day becomes the bot's permanent "Data Only" verdicts.
+    An explicit AI_PROVIDER=groq|gemini still means exactly that provider
+    and nothing else, so a deliberate pin is never second-guessed.
+    """
+    # Read the selector from the environment at call time so changing
+    # AI_PROVIDER doesn't require a code reload (config only samples it once).
+    provider = (os.environ.get("AI_PROVIDER") or AI_PROVIDER or "auto").lower()
+    if provider in ("groq", "gemini"):
+        key_env = GROQ_API_KEY_ENV if provider == "groq" else GEMINI_API_KEY_ENV
+        return [provider] if os.environ.get(key_env) else []
+    chain = []
+    if os.environ.get(GROQ_API_KEY_ENV):
+        chain.append("groq")
+    if os.environ.get(GEMINI_API_KEY_ENV):
+        chain.append("gemini")
+    return chain
+
+
+def _provider_model(provider):
+    return AI_MODEL if provider == "groq" else GEMINI_MODEL
+
+
+def _provider_label(provider):
+    return "Groq" if provider == "groq" else "Gemini"
+
+
+def provider_status():
+    """Diagnostics: which providers are configured and in what order."""
+    chain = _provider_chain()
+    if not chain:
+        return "no provider configured — set GROQ_API_KEY or GEMINI_API_KEY"
+    # Read the same live value _provider_chain() uses. Reading the
+    # import-time AI_PROVIDER constant here made /status claim
+    # "auto-selected" even when AI_PROVIDER was pinned at runtime.
+    forced = (
+        os.environ.get("AI_PROVIDER") or AI_PROVIDER or "auto"
+    ).lower() in ("groq", "gemini")
+    parts = [f"{_provider_label(p)} ({_provider_model(p)})" for p in chain]
+    if len(parts) > 1:
+        return " | ".join(parts) + " | primary, backup auto-selected"
+    return f"{parts[0]} | " + (
+        "forced by AI_PROVIDER" if forced else "auto-selected"
+    )
+
+
+def _call_openai_compatible(messages, api_key):
+    """POST to an OpenAI-compatible chat/completions endpoint (Groq etc.).
+
+    Returns the parsed JSON dict the model produced, or None on failure
+    (with _LAST_AI_ERROR describing the cause).
+    """
+    global _LAST_AI_ERROR
+    _LAST_AI_ERROR = None
+
+    url = f"{AI_BASE_URL.rstrip('/')}/chat/completions"
+    payload = {
+        "model": AI_MODEL,
+        "messages": messages,
+        "temperature": 0.4,
+        "response_format": {"type": "json_object"},
+    }
+    r, transport_error = _post_with_retry(
+        url,
+        payload,
+        headers={
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json",
+        },
+        timeout=30,
+    )
+    if r is None:
+        _LAST_AI_ERROR = transport_error
+        return None
+    if r.status_code == 200:
+        data = r.json()
+        text = (
+            (data.get("choices") or [{}])[0]
+            .get("message", {})
+            .get("content", "")
+        )
+        try:
+            return json.loads(text)
+        except json.JSONDecodeError:
+            _LAST_AI_ERROR = "model response was not valid JSON"
+            return None
+    if r.status_code == 404:
+        _LAST_AI_ERROR = (
+            f"model '{AI_MODEL}' not found at {AI_BASE_URL} (HTTP 404) — "
+            f"check AI_MODEL"
+        )
+    elif r.status_code in (401, 403):
+        _LAST_AI_ERROR = f"API key rejected (HTTP {r.status_code})"
+    elif r.status_code == 429:
+        _LAST_AI_ERROR = "rate limited (HTTP 429)"
+    else:
+        _LAST_AI_ERROR = f"HTTP {r.status_code} after retries"
+    return None
+
+
 def _call_gemini(prompt):
-    """Hit Gemini's generateContent endpoint. Returns dict or None on failure."""
+    """Hit Gemini's generateContent endpoint. Returns dict or None on failure.
+
+    Distinguishes failure causes so callers can report them accurately —
+    a model-name 404 used to masquerade as "key not configured" because
+    every failure fell into the same generic fallback text (see
+    .agents/memory/gemini-model-404-misdiagnosis.md).
+
+    If the primary model is throttled or overloaded, walks the fallback
+    model list before giving up, so a busy model degrades into a slightly
+    slower answer rather than into the "Data Only" fallback verdict.
+    """
+    global _LAST_AI_ERROR
+    _LAST_AI_ERROR = None  # reset so stale errors never leak through
+
+    api_key = os.environ.get(GEMINI_API_KEY_ENV)
+    if not api_key:
+        _LAST_AI_ERROR = "not_configured"
+        return None
+
+    payload = {
+        "contents": [{"parts": [{"text": prompt}]}],
+        "generationConfig": {
+            "responseMimeType": "application/json",
+            # Explicit budget: current Gemini aliases resolve to thinking
+            # models, and thinking tokens come out of the same allowance.
+            # Left unset, a long analysis can spend the whole default
+            # budget on thinking and come back with no text at all.
+            "maxOutputTokens": 4096,
+        },
+    }
+
+    models = [GEMINI_MODEL] + [m for m in GEMINI_FALLBACK_MODELS if m != GEMINI_MODEL]
+    last_note = None
+    for model in models:
+        url = (
+            f"https://generativelanguage.googleapis.com/v1beta/models/"
+            f"{model}:generateContent?key={api_key}"
+        )
+        r, transport_error = _post_with_retry(url, payload, timeout=45)
+        if r is None:
+            last_note = transport_error
+            continue
+        if r.status_code == 200:
+            parsed = _parse_gemini_json(r)
+            if parsed is not None:
+                if model != GEMINI_MODEL:
+                    _LAST_AI_ERROR = None
+                return parsed
+            last_note = "model returned unparseable JSON"
+            continue
+        # A 404 means the model name is wrong or retired for this key —
+        # trying the next candidate is still useful, but a 401/403 is a
+        # key problem that no other model will fix.
+        last_note = f"HTTP {r.status_code} from {model}"
+        if r.status_code in (401, 403):
+            _LAST_AI_ERROR = f"API key rejected (HTTP {r.status_code})"
+            return None
+
+    _LAST_AI_ERROR = f"{last_note} (tried {len(models)} model(s))"
+    return None
+
+
+def _parse_gemini_json(r):
+    """Pull the JSON object out of a 200 response, or None if absent."""
+    data = r.json()
+    text = (
+        data.get("candidates", [{}])[0]
+        .get("content", {})
+        .get("parts", [{}])[0]
+        .get("text", "")
+    )
+    try:
+        return json.loads(text)
+    except json.JSONDecodeError:
+        return None  # unparseable JSON — treat as upstream failure
+
+
+def _call_gemini_single_model(prompt, model):
+    """One model, no fallback walk. Kept for tests/diagnostics."""
+    global _LAST_AI_ERROR
     api_key = os.environ.get(GEMINI_API_KEY_ENV)
     if not api_key:
         return None
     url = (
         f"https://generativelanguage.googleapis.com/v1beta/models/"
-        f"{GEMINI_MODEL}:generateContent?key={api_key}"
+        f"{model}:generateContent?key={api_key}"
     )
-    payload = {
-        "contents": [{"parts": [{"text": prompt}]}],
-        "generationConfig": {"responseMimeType": "application/json"},
-    }
-    try:
-        r = requests.post(url, json=payload, timeout=30)
-        if r.status_code == 200:
-            data = r.json()
-            text = (
-                data.get("candidates", [{}])[0]
-                .get("content", {})
-                .get("parts", [{}])[0]
-                .get("text", "")
+    r, transport_error = _post_with_retry(
+        url,
+        {
+            "contents": [{"parts": [{"text": prompt}]}],
+            "generationConfig": {
+                "responseMimeType": "application/json",
+                "maxOutputTokens": 4096,
+            },
+        },
+        timeout=45,
+    )
+    if r is None:
+        _LAST_AI_ERROR = transport_error
+        return None
+    if r.status_code == 200:
+        return _parse_gemini_json(r)
+    _LAST_AI_ERROR = f"HTTP {r.status_code} from {model}"
+    return None
+
+
+def _call_model(prompt):
+    """Dispatch a structured-JSON prompt to the configured AI provider(s).
+
+    Walks the provider chain, so a throttled or rejected primary hands off
+    to the backup instead of collapsing to the "Data Only" verdict. Returns
+    the parsed dict or None if every configured provider failed.
+    """
+    global _LAST_AI_ERROR, _LAST_AI_PROVIDER
+    chain = _provider_chain()
+    if not chain:
+        _LAST_AI_ERROR = "not_configured"
+        return None
+
+    attempts = []
+    for provider in chain:
+        if provider == "groq":
+            result = _call_openai_compatible(
+                [{"role": "user", "content": prompt}],
+                os.environ.get(GROQ_API_KEY_ENV),
             )
-            return json.loads(text)
-    except Exception:
-        pass
+        else:
+            result = _call_gemini(prompt)
+        if result is not None:
+            _LAST_AI_PROVIDER = provider
+            return result
+        attempts.append(f"{_provider_label(provider)}: {_LAST_AI_ERROR}")
+
+    _LAST_AI_PROVIDER = None
+    _LAST_AI_ERROR = "; ".join(attempts)
     return None
 
 
 def _fallback(game_data):
-    """Deterministic explanation when Gemini is unavailable."""
+    """Deterministic explanation when the AI provider is unavailable."""
     score = (game_data.get("scout_score") or {}).get("total", 0)
+    if _LAST_AI_ERROR == "not_configured":
+        risks = [
+            "AI analysis not enabled. Set GROQ_API_KEY (free, recommended) "
+            "or GEMINI_API_KEY in the environment to enable detailed "
+            "acquisition assessment.",
+        ]
+        recommendation = (
+            "Add GROQ_API_KEY or GEMINI_API_KEY to the environment, restart "
+            "the bot, and rerun for AI-powered acquisition context."
+        )
+    else:
+        # A key IS configured but the call failed — say why so a broken
+        # model name or rejected key isn't misread as "key not configured".
+        risks = [
+            f"AI analysis unavailable — last AI call failed: {_LAST_AI_ERROR}.",
+        ]
+        recommendation = (
+            "Data-only verdict below. Check the bot logs for the AI "
+            "error and verify the API key and AI_MODEL setting."
+        )
     return {
         "verdict": VERDICT_FALLBACK,
         "confidence": 0,
@@ -239,13 +572,8 @@ def _fallback(game_data):
             f"Scout Score = {score}/100 (AI analysis not enabled).",
             f"{game_data.get('playing', 0):,} concurrent players.",
         ],
-        "risks": [
-            "AI analysis not enabled. Set GEMINI_API_KEY in environment to enable detailed acquisition assessment.",
-        ],
-        "recommendation": (
-            "Add GEMINI_API_KEY to environment, restart the bot, "
-            "and rerun for AI-powered acquisition context."
-        ),
+        "risks": risks,
+        "recommendation": recommendation,
         "raw": "",
     }
 
@@ -260,11 +588,11 @@ def _quota_blocked_result(game_data):
             f"Scout Score = {score}/100 (cached locally).",
         ],
         "risks": [
-            "Daily Gemini quota exhausted — AI analysis paused today.",
+            "Daily AI quota exhausted — analysis paused until midnight UTC.",
         ],
         "recommendation": (
             "Lower GEMINI_DAILY_LIMIT to be safe; raise later once costs are "
-            "clear. Live Gemini resumes at midnight UTC."
+            "clear. Live AI analysis resumes at midnight UTC."
         ),
         "raw": "",
     }
@@ -337,14 +665,17 @@ def analyze_game(game_data, force_refresh=False):
     prompt = ACQUISITION_PROMPT_TEMPLATE.format(
         game_data=json.dumps(payload, indent=2)
     )
-    raw_result = _call_gemini(prompt)
+    raw_result = _call_model(prompt)
 
     if raw_result is None:
-        normalized = _normalize(_fallback(game_data))
-    else:
-        normalized = _normalize(raw_result)
-        normalized["raw"] = json.dumps(raw_result)
-        record_gemini_call(game_id, normalized.get("verdict"))
+        # Do NOT cache fallback/quota results: they'd freeze today's outage
+        # (missing key, 404, exhausted quota) into the 24h cache and the
+        # game would never get a real AI analysis until the cache expired.
+        return _normalize(_fallback(game_data))
+
+    normalized = _normalize(raw_result)
+    normalized["raw"] = json.dumps(raw_result)
+    record_gemini_call(game_id, normalized.get("verdict"))
 
     _cache_put(game_id, normalized)
     return normalized
@@ -386,7 +717,7 @@ QUESTION_PROMPT_TEMPLATE_CONVERSATIONAL = (
 
 def _ensure_question_table():
     """Create ai_question_cache if missing."""
-    conn = sqlite3.connect(DATABASE)
+    conn = _connect(DATABASE)
     cursor = conn.cursor()
     cursor.execute("""
     CREATE TABLE IF NOT EXISTS ai_question_cache (
@@ -402,7 +733,7 @@ def _ensure_question_table():
 def _question_cache_get(key):
     """Return (answer, last_checked_epoch) or None."""
     _ensure_question_table()
-    conn = sqlite3.connect(DATABASE)
+    conn = _connect(DATABASE)
     cursor = conn.cursor()
     cursor.execute("""
     SELECT answer, strftime('%s', last_checked)
@@ -416,7 +747,7 @@ def _question_cache_get(key):
 def _question_cache_put(key, answer):
     """Upsert the cached answer for a question-hash key."""
     _ensure_question_table()
-    conn = sqlite3.connect(DATABASE)
+    conn = _connect(DATABASE)
     cursor = conn.cursor()
     cursor.execute("""
     INSERT INTO ai_question_cache (key, answer) VALUES (?, ?)
@@ -432,8 +763,78 @@ def _question_cache_valid(row, now_epoch):
     return bool(row) and (now_epoch - int(row[1] or 0)) < QUESTION_CACHE_TTL_SECONDS
 
 
+def _call_provider_text(prompt):
+    """Send a freeform (non-JSON) prompt, walking the provider chain.
+
+    Returns (answer_text, error_note). error_note is None on success.
+    """
+    chain = _provider_chain()
+    if not chain:
+        return None, "not_configured"
+    notes = []
+    for provider in chain:
+        answer, note = _call_provider_text_single(prompt, provider)
+        if answer:
+            return answer, None
+        notes.append(note or f"{_provider_label(provider)} failed")
+    return None, " | ".join(notes)
+
+
+def _call_provider_text_single(prompt, provider):
+    """One provider, no fallback. Returns (answer_text, error_note)."""
+    if provider == "groq":
+        url = f"{AI_BASE_URL.rstrip('/')}/chat/completions"
+        payload = {
+            "model": AI_MODEL,
+            "messages": [{"role": "user", "content": prompt}],
+            "temperature": 0.6,
+        }
+        headers = {
+            "Authorization": f"Bearer {os.environ.get(GROQ_API_KEY_ENV)}",
+            "Content-Type": "application/json",
+        }
+        label = "AI"
+    else:
+        url = (
+            f"https://generativelanguage.googleapis.com/v1beta/models/"
+            f"{GEMINI_MODEL}:generateContent?key={os.environ.get(GEMINI_API_KEY_ENV)}"
+        )
+        payload = {"contents": [{"parts": [{"text": prompt}]}]}
+        headers = {}
+        label = "Gemini"
+
+    r, transport_error = _post_with_retry(url, payload, headers=headers, timeout=30)
+    if r is None:
+        return None, f"⚠️ {label} call failed: `{transport_error}`"
+    if r.status_code == 200:
+        data = r.json()
+        if provider == "groq":
+            answer = (
+                (data.get("choices") or [{}])[0]
+                .get("message", {})
+                .get("content", "")
+            )
+        else:
+            answer = (
+                data.get("candidates", [{}])[0]
+                .get("content", {})
+                .get("parts", [{}])[0]
+                .get("text", "")
+            )
+        answer = (answer or "").strip()
+        if answer:
+            return answer, None
+        return None, f"{label} returned an empty response."
+    if r.status_code == 429:
+        return None, (
+            f"⚠️ {label} is rate-limited right now (HTTP 429). "
+            "Try again in a minute, or wait for the next daily quota window."
+        )
+    return None, f"⚠️ {label} returned HTTP {r.status_code}: {r.text[:200]}"
+
+
 def answer_question(question, force_refresh=False, history=None):
-    """Send a freeform question to Gemini. Cached by question hash 24h."""
+    """Send a freeform question to the active AI provider. Cached 24h."""
     question = (question or "").strip()
     if not question:
         return "🤖 I'm listening — try `@Roblox Game Scout <game id>` or a question."
@@ -447,15 +848,14 @@ def answer_question(question, force_refresh=False, history=None):
 
     if quota_remaining() <= 0:
         return (
-            "⏸️ Daily Gemini quota exhausted — assistant paused until "
-            "midnight UTC."
+            "⏸️ Daily AI quota exhausted — assistant paused until midnight UTC."
         )
 
-    api_key = os.environ.get(GEMINI_API_KEY_ENV)
-    if not api_key:
+    if _active_provider() is None:
         return (
-            "ℹ️ AI assistant not configured yet — set `GEMINI_API_KEY` in "
-            "Replit Secrets, then mention me again."
+            "ℹ️ AI assistant not configured yet — set `GROQ_API_KEY` (free, "
+            "recommended) or `GEMINI_API_KEY` in the environment, then "
+            "mention me again."
         )
 
     if history:
@@ -466,36 +866,9 @@ def answer_question(question, force_refresh=False, history=None):
     else:
         prompt = QUESTION_PROMPT_TEMPLATE.format(question=question)
 
-    url = (
-        f"https://generativelanguage.googleapis.com/v1beta/models/"
-        f"{GEMINI_MODEL}:generateContent?key={api_key}"
-    )
-    try:
-        r = requests.post(
-            url,
-            json={"contents": [{"parts": [{"text": prompt}]}]},
-            timeout=30,
-        )
-        if r.status_code == 200:
-            data = r.json()
-            answer = (
-                data.get("candidates", [{}])[0]
-                .get("content", {})
-                .get("parts", [{}])[0]
-                .get("text", "")
-            ).strip()
-            if not answer:
-                answer = "(Gemini returned an empty response.)"
-        else:
-            if r.status_code == 429:
-                answer = (
-                    "⚠️ Gemini is rate-limited right now (HTTP 429). "
-                    "Try again in a minute, or wait for the next daily quota window."
-                )
-            else:
-                answer = f"⚠️ Gemini returned HTTP {r.status_code}: {r.text[:200]}"
-    except Exception as exc:
-        answer = f"⚠️ Gemini call failed: `{exc}`"
+    answer, error = _call_provider_text(prompt)
+    if answer is None:
+        return error  # do not cache failures (same rule as analyze_game)
 
     _question_cache_put(key, answer)
     record_gemini_call(0, "📝 Assistant answer")

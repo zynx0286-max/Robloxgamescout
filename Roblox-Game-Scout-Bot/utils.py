@@ -1,8 +1,5 @@
 """Utility functions for the game scout bot."""
 
-import hashlib
-from typing import Any
-
 
 def remove_duplicates(games: list[dict]) -> list[dict]:
     """
@@ -18,9 +15,3 @@ def remove_duplicates(games: list[dict]) -> list[dict]:
             seen.add(gid)
             result.append(game)
     return result
-
-
-def game_id_hash(game: dict) -> str:
-    """Generate a stable hash for a game based on its ID."""
-    gid = game.get("id", 0)
-    return hashlib.md5(str(gid).encode()).hexdigest()[:8]

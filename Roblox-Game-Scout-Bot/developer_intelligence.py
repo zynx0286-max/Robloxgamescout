@@ -19,9 +19,18 @@ DEV_CACHE_TTL_SECONDS = 86400  # 24h
 DEV_LABEL = "👨\u200d💻 Developer history"
 
 
+def _connect(path):
+    """Open the shared SQLite file under the sqlite_conn contract."""
+    import sqlite_conn
+
+    conn = sqlite3.connect(path)
+    sqlite_conn.tune(conn)
+    return conn
+
+
 def _ensure_table():
     """Create developer_cache if missing."""
-    conn = sqlite3.connect(DATABASE)
+    conn = _connect(DATABASE)
     cursor = conn.cursor()
     cursor.execute("""
     CREATE TABLE IF NOT EXISTS developer_cache (
@@ -45,7 +54,7 @@ def _ensure_table():
 
 def _cache_get(creator_key):
     _ensure_table()
-    conn = sqlite3.connect(DATABASE)
+    conn = _connect(DATABASE)
     cursor = conn.cursor()
     cursor.execute("""
     SELECT creator_id, creator_type, name, member_count,
@@ -62,7 +71,7 @@ def _cache_get(creator_key):
 
 def _cache_put(creator_key, data):
     _ensure_table()
-    conn = sqlite3.connect(DATABASE)
+    conn = _connect(DATABASE)
     cursor = conn.cursor()
     cursor.execute("""
     INSERT INTO developer_cache

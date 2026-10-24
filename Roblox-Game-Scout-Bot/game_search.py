@@ -1,64 +1,35 @@
 """
 Curated game seed list and discovery sources.
 
-Maintains a large, configurable seed list of universe IDs across genres.
-This is the fallback when Roblox API search endpoints are unavailable.
+Maintains a configurable seed list of universe IDs across genres.
+This is the fallback when the search API is unavailable, and the
+recommendation-seed source for /scan.
+
+IMPORTANT: every ID below was verified live against
+`games.roblox.com/v1/games?universeIds=...` on 2026-09. The previous list
+was mostly wrong — famous *place* IDs used as universe IDs, which resolve
+to unrelated junk games (0 CCU), plus several delisted universes. Run
+`python validate_seeds.py` after editing to re-verify, and resolve new
+entries from place IDs via
+`apis.roblox.com/universes/v1/places/{placeId}/universe` first.
 """
 
-# Expanded curated Universe IDs across genres.
-# These are well-known Roblox games verified to return data from the
-# /v1/games endpoint. Add more IDs as they are discovered.
+# Verified universe IDs across genres (name = expected game on Roblox).
 CURATED_SEED_IDS = [
-    # --- Action / Fighting ---
     994732206,    # Blox Fruits
-    4483381587,   # Pet Simulator X
-    920587237,    # Adopt Me!
-    537413528,    # Jailbreak
-    286090590,    # MeepCity
-    142823291,    # Murder Mystery 2
-    189707,       # Natural Disaster Survival
-    4847433945,   # Piggy
-    735030788,    # Royale High
-    3956818381,   # Ninja Legends
-    15532962292,  # The Strongest Battlegrounds
-    6516141723,   # Doors
-    9872521565,   # Blade Ball
-    10323769974,  # The Games
-    13787745605,  # Untitled Tag Game
-    12345678901,  # Slap Battles
-    6403373529,   # BedWars
-    16732694052,  # Tower Defense Simulator
-    9827235391,   # Fisch
-    10809301411,  # Dress to Impress
-    18565514929,  # The Classic
-    4483381587,   # Pet Simulator 99
-    6284583730,   # Arsenal
-    286090590,    # MeepCity
-    142823291,    # Murder Mystery 2
-    189707,       # Natural Disaster Survival
-    4847433945,   # Piggy
-    735030788,    # Royale High
-    3956818381,   # Ninja Legends
-    15532962292,  # The Strongest Battlegrounds
-    6516141723,   # Doors
-    9872521565,   # Blade Ball
-    10323769974,  # The Games
-    13787745605,  # Untitled Tag Game
-    12345678901,  # Slap Battles
-    6403373529,   # BedWars
-    16732694052,  # Tower Defense Simulator
-    9827235391,   # Fisch
-    10809301411,  # Dress to Impress
-    18565514929,  # The Classic
-    4483381587,   # Pet Simulator 99
-    6284583730,   # Arsenal
-]
-
-# Remove duplicates while preserving order
-_SEEN = set()
-CURATED_SEED_IDS = [
-    x for x in CURATED_SEED_IDS
-    if not (x in _SEEN or _SEEN.add(x))
+    383310974,    # Adopt Me!
+    245662005,    # Jailbreak
+    140239261,    # MeepCity
+    66654135,     # Murder Mystery 2
+    65241,        # Natural Disaster Survival
+    2440500124,   # DOORS
+    2380077519,   # Slap Battles
+    4777817887,   # Blade Ball
+    3317771874,   # Pet Simulator 99
+    5750914919,   # Fisch
+    5203828273,   # Dress To Impress
+    7436755782,   # Grow a Garden
+    7326934954,   # 99 Nights in the Forest
 ]
 
 

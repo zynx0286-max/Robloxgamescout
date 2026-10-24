@@ -1,16 +1,27 @@
 """
-Trending game discovery sources.
+Roblox Charts discovery.
 
-Replaces the old RoTrends/RobloxGames HTML scrapers with the official
-**Roblox Charts** data (apis.roblox.com/explore-api — the same endpoints
-that power https://www.roblox.com/charts) plus per-game analytics links to
-RoMonitor Stats and Creator Exchange for enrichment.
+Trending discovery is the official **Roblox Charts** API
+(apis.roblox.com/explore-api — the same endpoints that power
+https://www.roblox.com/charts). That is the entire source list: the former
+third-party integrations were removed because none of them expose a stable,
+public game-list or metric API.
 
-The old rotrends.py depended on scraping third-party HTML layouts, which
-broke whenever those sites changed. The explore API is a stable, official
-JSON endpoint that is far more reliable.
+What was removed and why (verified 2026-10):
+  - **RoMonitor Stats** — charts sit behind Cloudflare and there is no public
+    game-list endpoint. The old function always returned an empty list.
+  - **Creator Exchange** — client-rendered app, no public game-list endpoint.
+    Also always returned empty.
+  - **BloxAtlas / Atlas** — Atlas was the only third party actually returning
+    data (7 days of history). Growth history is now computed from the bot's
+    own `game_history` snapshots over 30 days — deeper, and with no external
+    dependency. See `history.py`.
 
-Supported charts sorts (all feed roblox.com/charts):
+A browser-like User-Agent is still sent because Roblox's public web APIs 403
+requests that identify as a bare script client. That is a header, not a
+dependency: nothing here leaves Roblox's own infrastructure.
+
+Supported chart sorts (all feed roblox.com/charts):
   - Top_Trending_V6              "Top Trending"
   - Up_And_Coming_V6             "Up-and-Coming"  (published <28d, user growth)
   - CCU_Based_V1                 "Top Playing Now" (live concurrent players)
@@ -24,11 +35,7 @@ from typing import Optional
 
 import aiohttp
 
-from config import (
-    ENABLE_ROBLOX_CHARTS,
-    ENABLE_ROMONITOR,
-    ENABLE_CREATOR_EXCHANGE,
-)
+from config import ENABLE_ROBLOX_CHARTS
 
 logger = logging.getLogger("trending_sources")
 
@@ -57,24 +64,15 @@ _HEADERS = {
 
 
 def build_analytics_links(universe_id: Optional[int]) -> dict:
-    """
-    Build per-game analytics links for a universe ID.
+    """Per-game links for the embed's market-links row.
 
-    Returns a dict of {platform_name: url} that embed builders use for the
-    "Market Links" row. Falls back to empty dict when no ID is available.
+    Roblox-native only: the game's own page. (Charts is a browsing surface,
+    not a per-game URL, so it is not a link worth attaching to every embed.)
+    Returns {} when no ID is available.
     """
     if not universe_id:
         return {}
-
-    links = {}
-    if ENABLE_ROBLOX_CHARTS:
-        # Official Roblox charts page for this game's genre/sort area.
-        links["Roblox Charts"] = f"https://www.roblox.com/charts#/genre/any"
-    if ENABLE_ROMONITOR:
-        links["RoMonitor"] = f"https://romonitorstats.com/experience/{universe_id}"
-    if ENABLE_CREATOR_EXCHANGE:
-        links["Creator Exchange"] = f"https://creatorexchange.io/game/{universe_id}"
-    return links
+    return {"Roblox": f"https://www.roblox.com/games/{int(universe_id)}"}
 
 
 def get_game_links(universe_id: Optional[int]) -> dict:
@@ -87,12 +85,11 @@ async def get_roblox_charts_games(
     max_per_sort: int = 30,
     sorts: Optional[list[tuple[str, str]]] = None,
 ) -> list[dict]:
-    """
-    Fetch trending Roblox games from the official Roblox Charts API.
+    """Fetch trending games from the official Roblox Charts API.
 
-    Uses the explore-api sort endpoints that power roblox.com/charts.
-    Each returned game carries its universe ID, live player count, votes,
-    genre, and the chart sort it was found under.
+    Uses the explore-api sort endpoints that power roblox.com/charts. Each
+    returned game carries its universe ID, live player count, votes, genre,
+    and the chart sort it was found under.
 
     Args:
         session: aiohttp ClientSession.
@@ -115,15 +112,31 @@ async def get_roblox_charts_games(
     ]
     results = await asyncio.gather(*tasks, return_exceptions=True)
 
-    seen_ids = set()
+    # Merge across sorts, keeping every chart a game appears on: the first
+    # stub for an id wins the base fields, and each additional sort is
+    # appended to its chart_appearances list. (A game at #3 on Top Trending
+    # AND #80 on Top Playing Now is a #3 game — but it is on both charts,
+    # and chart_rank.py records every position.)
     games = []
+    by_id = {}
     for res in results:
         if isinstance(res, list):
             for game in res:
                 gid = game.get("id")
-                if gid and gid not in seen_ids:
-                    seen_ids.add(gid)
+                if not gid:
+                    continue
+                appearance = (
+                    game.get("charts_sort_id") or "",
+                    game.get("charts_sort") or "",
+                    game.get("chart_rank"),
+                )
+                existing = by_id.get(gid)
+                if existing is None:
+                    game["chart_appearances"] = [appearance]
+                    by_id[gid] = game
                     games.append(game)
+                elif appearance not in existing["chart_appearances"]:
+                    existing["chart_appearances"].append(appearance)
         elif isinstance(res, Exception):
             logger.warning("Roblox Charts sort fetch failed: %s", res)
 
@@ -149,12 +162,33 @@ async def _fetch_sort(
             url, headers=_HEADERS, timeout=aiohttp.ClientTimeout(total=15)
         ) as resp:
             if resp.status != 200:
-                logger.debug(
-                    "Roblox Charts sort %s returned HTTP %d", sort_id, resp.status
+                # A non-200 here almost always means Roblox retired or
+                # renamed a sort id (their 400 body is literally "Sort not
+                # found or not enabled"). That shrinks discovery AND the
+                # chart-rank signal silently, so it must be visible at
+                # warning level — a debug line was how a dead sort would
+                # have gone unnoticed for months.
+                body = ""
+                try:
+                    body = (await resp.text())[:120]
+                except Exception:
+                    pass
+                logger.warning(
+                    "Roblox Charts sort %s returned HTTP %d (%s) — sort may "
+                    "have been retired or renamed; discovery and chart "
+                    "ranks for it are now empty.",
+                    sort_id,
+                    resp.status,
+                    body or "no body",
                 )
                 return games
             data = await resp.json()
-            for item in (data.get("games") or [])[:max_games]:
+            # position = the game's rank within this sort (1 = top of the
+            # chart). enumerate() over the API's ordering, not the truncated
+            # slice, so the rank is the true chart position.
+            for position, item in enumerate(data.get("games") or [], start=1):
+                if position > max_games:
+                    break
                 uid = item.get("universeId") or item.get("id")
                 if not uid:
                     continue
@@ -168,6 +202,8 @@ async def _fetch_sort(
                     "place_id": item.get("rootPlaceId", uid),
                     "source": "RobloxCharts",
                     "charts_sort": label,
+                    "charts_sort_id": sort_id,
+                    "chart_rank": position,
                 })
             logger.debug("Roblox Charts sort %s: %d games", sort_id, len(games))
     except asyncio.TimeoutError:
@@ -177,73 +213,9 @@ async def _fetch_sort(
     return games
 
 
-async def get_romonitor_games(
-    session: aiohttp.ClientSession,
-    max_pages: int = 1,
-) -> list[dict]:
-    """
-    Best-effort RoMonitor Stats discovery source.
-
-    RoMonitor Stats (romonitorstats.com) serves its charts behind Cloudflare
-    and does not expose a public game-list API, so direct scraping is usually
-    blocked. This source is intentionally optional and always degrades
-    gracefully to an empty list. Per-game analytics links are still attached
-    to embeds via build_analytics_links().
-    """
-    if not ENABLE_ROMONITOR:
-        logger.info("RoMonitor source disabled by config")
-        return []
-    logger.info("RoMonitor Stats has no public game-list API; skipping scrape")
-    return []
-
-
-async def get_creator_exchange_games(
-    session: aiohttp.ClientSession,
-    max_pages: int = 1,
-) -> list[dict]:
-    """
-    Best-effort Creator Exchange discovery source.
-
-    Creator Exchange (creatorexchange.io) is a client-rendered app with no
-    public game-list endpoint, so this source is optional and degrades to an
-    empty list. Per-game pages are linked from embeds via
-    build_analytics_links().
-    """
-    if not ENABLE_CREATOR_EXCHANGE:
-        logger.info("Creator Exchange source disabled by config")
-        return []
-    logger.info("Creator Exchange has no public game-list API; skipping scrape")
-    return []
-
-
-async def get_third_party_trending(
-    session: aiohttp.ClientSession,
-) -> list[dict]:
-    """
-    Aggregate trending games from all enabled third-party sources.
-
-    Returns a deduplicated list of game stubs.
-    """
-    tasks = [
-        get_roblox_charts_games(session),
-        get_romonitor_games(session),
-        get_creator_exchange_games(session),
-    ]
-    results = await asyncio.gather(*tasks, return_exceptions=True)
-
-    seen_ids = set()
-    merged = []
-    for res in results:
-        if isinstance(res, list):
-            for game in res:
-                gid = game.get("id")
-                if gid and gid not in seen_ids:
-                    seen_ids.add(gid)
-                    merged.append(game)
-        elif isinstance(res, Exception):
-            logger.warning("Third-party trending fetch failed: %s", res)
-
-    return merged
+async def get_charts_trending(session: aiohttp.ClientSession) -> list[dict]:
+    """Trending games from Roblox Charts (the sole trending source)."""
+    return await get_roblox_charts_games(session)
 
 
 def get_trending_games() -> list[dict]:
@@ -254,7 +226,7 @@ def get_trending_games() -> list[dict]:
         return []
 
     games = []
-    seen_ids = set()
+    by_id = {}
     for sort_id, label in CHART_SORTS:
         try:
             resp = requests.get(
@@ -266,17 +238,28 @@ def get_trending_games() -> list[dict]:
             if resp.status_code != 200:
                 continue
             data = resp.json()
-            for item in (data.get("games") or [])[:30]:
+            for position, item in enumerate(data.get("games") or [], start=1):
+                if position > 30:
+                    break
                 uid = item.get("universeId") or item.get("id")
-                if not uid or uid in seen_ids:
+                if not uid:
                     continue
-                seen_ids.add(uid)
-                games.append({
-                    "id": int(uid),
-                    "name": item.get("name", "Unknown"),
-                    "source": "RobloxCharts",
-                    "charts_sort": label,
-                })
+                appearance = (sort_id, label, position)
+                existing = by_id.get(uid)
+                if existing is None:
+                    game = {
+                        "id": int(uid),
+                        "name": item.get("name", "Unknown"),
+                        "source": "RobloxCharts",
+                        "charts_sort": label,
+                        "charts_sort_id": sort_id,
+                        "chart_rank": position,
+                        "chart_appearances": [appearance],
+                    }
+                    by_id[uid] = game
+                    games.append(game)
+                elif appearance not in existing["chart_appearances"]:
+                    existing["chart_appearances"].append(appearance)
         except Exception as exc:
             logger.warning("Sync Roblox Charts fetch failed for %s: %s", sort_id, exc)
     return games

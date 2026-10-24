@@ -1,0 +1,18 @@
+[Unit]
+Description=Roblox Game Scout Discord bot
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+# EDIT the two paths below to match where you cloned the repo,
+# and the User to your Linux username (usually "ubuntu" on OCI).
+User=ubuntu
+WorkingDirectory=/home/ubuntu/game-scout/Roblox-Game-Scout-Bot
+Environment=DATABASE_PATH=/home/ubuntu/scoutbot-data/scoutbot.db
+ExecStart=/home/ubuntu/game-scout/Roblox-Game-Scout-Bot/.venv/bin/python main.py
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target

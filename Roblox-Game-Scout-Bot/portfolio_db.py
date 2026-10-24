@@ -13,14 +13,14 @@ discord_snapshots -- optional Discord member counts (only where authorized).
 """
 
 import sqlite3
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from config import DATABASE_PATH
 
 DATABASE = DATABASE_PATH
 
 
 def create_portfolio_tables():
-    conn = sqlite3.connect(DATABASE)
+    conn = _connect()  # same contract as every runtime path (see sqlite_conn)
     cursor = conn.cursor()
 
     cursor.execute("""
@@ -65,7 +65,11 @@ def create_portfolio_tables():
 
     # Keep the snapshot tables from growing forever: retain ~90 days for
     # the 7d/30d charts the API serves.
-    cutoff = (datetime.utcnow() - timedelta(days=90)).isoformat(sep=" ")
+    # Snapshot timestamps are written by SQLite CURRENT_TIMESTAMP (naive UTC),
+    # so compare against naive-UTC wall clock, not local time.
+    cutoff = (
+        datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(days=90)
+    ).isoformat(sep=" ")
     cursor.execute("DELETE FROM game_snapshots WHERE timestamp < ?", (cutoff,))
     cursor.execute("DELETE FROM discord_snapshots WHERE timestamp < ?", (cutoff,))
 
@@ -74,7 +78,13 @@ def create_portfolio_tables():
 
 
 def _connect():
-    return sqlite3.connect(DATABASE)
+    """Shared connection contract: same pragmas every other module applies
+    (see sqlite_conn.tune). The worker and the API both use this."""
+    import sqlite_conn
+
+    conn = sqlite3.connect(DATABASE)
+    sqlite_conn.tune(conn)
+    return conn
 
 
 def add_portfolio_game(
@@ -241,6 +251,42 @@ def record_game_snapshot(game_id, players, visits, favorites=None,
     conn.close()
 
 
+def record_game_snapshots_bulk(entries):
+    """Write a whole worker tick's snapshots in ONE connection + commit.
+
+    The worker sampled the Roblox API in batches but then paid one
+    connection + fsync per row. Entries are (game_id, players, visits,
+    favorites, likes, dislikes); the like ratio is derived per row —
+    same math as record_game_snapshot. No-op on an empty batch.
+    """
+    rows = []
+    for entry in entries:
+        game_id, players, visits, favorites, likes, dislikes = entry
+        like_ratio = None
+        if likes is not None and dislikes is not None:
+            total_votes = likes + dislikes
+            if total_votes > 0:
+                like_ratio = round(likes / total_votes * 100.0, 2)
+        rows.append((
+            int(game_id), players, visits, favorites, likes, dislikes, like_ratio,
+        ))
+    if not rows:
+        return
+    conn = _connect()
+    try:
+        conn.cursor().executemany(
+            """
+            INSERT INTO game_snapshots
+                (game_id, players, visits, favorites, likes, dislikes, like_ratio)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+            """,
+            rows,
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+
 def get_latest_snapshot(game_id):
     conn = _connect()
     cursor = conn.cursor()
@@ -264,8 +310,115 @@ def get_latest_snapshot(game_id):
     }
 
 
+def get_snapshots_bulk(game_ids, hours=None):
+    """Snapshot rows for MANY games in ONE query.
+
+    `game_ids` is an iterable of game ids; rows come back oldest-first
+    per game (same ordering get_snapshots returns) inside an ordered
+    dict keyed by requested id — games with no data in the window get
+    an empty list, so a dashboard can render gaps instead of 404s.
+    One indexed query replaces one connection + query per chart.
+    """
+    ids = [int(g) for g in dict.fromkeys(game_ids)]  # dedupe, keep order
+    if not ids:
+        return {}
+    query = (
+        "SELECT game_id, timestamp, players, visits, favorites, "
+        "likes, dislikes, like_ratio FROM game_snapshots "
+        "WHERE game_id IN (%s)" % ", ".join("?" for _ in ids)
+    )
+    params = list(ids)
+    if hours is not None:
+        cutoff = (
+            datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(hours=hours)
+        ).isoformat(sep=" ")
+        query += " AND timestamp >= ?"
+        params.append(cutoff)
+    query += " ORDER BY game_id ASC, timestamp ASC, id ASC"
+    conn = _connect()
+    try:
+        rows = conn.cursor().execute(query, params).fetchall()
+    finally:
+        conn.close()
+
+    groups: dict[int, list] = {gid: [] for gid in ids}
+    for game_id, ts, players, visits, favorites, likes, dislikes, ratio in rows:
+        groups[int(game_id)].append({
+            "timestamp": ts,
+            "players": players,
+            "visits": visits,
+            "favorites": favorites,
+            "likes": likes,
+            "dislikes": dislikes,
+            "like_ratio": ratio,
+        })
+    return groups
+
+
+def get_latest_snapshots_bulk(game_ids):
+    """The latest raw snapshot row per game, in ONE query.
+
+    Returns {game_id: latest-row-dict-or-None}. Rows come back ordered
+    by game_id then id DESC; the first row per game wins — exactly what
+    get_latest_snapshot returns per game, without the N connections.
+    """
+    ids = [int(g) for g in dict.fromkeys(game_ids)]
+    if not ids:
+        return {}
+    query = (
+        "SELECT game_id, timestamp, players, visits, favorites, "
+        "likes, dislikes, like_ratio FROM game_snapshots "
+        "WHERE game_id IN (%s) ORDER BY game_id ASC, id DESC"
+        % ", ".join("?" for _ in ids)
+    )
+    conn = _connect()
+    try:
+        rows = conn.cursor().execute(query, list(ids)).fetchall()
+    finally:
+        conn.close()
+    out: dict = {gid: None for gid in ids}
+    for game_id, ts, players, visits, favorites, likes, dislikes, ratio in rows:
+        if out[int(game_id)] is None:  # first hit per game is the newest
+            out[int(game_id)] = {
+                "timestamp": ts,
+                "players": players,
+                "visits": visits,
+                "favorites": favorites,
+                "likes": likes,
+                "dislikes": dislikes,
+                "like_ratio": ratio,
+            }
+    return out
+
+
+def get_latest_discord_snapshots_bulk(game_ids):
+    """Latest Discord member count per game, in ONE query.
+
+    Same contract as get_latest_discord_snapshot, per game, batched:
+    {game_id: {timestamp, member_count} or None}.
+    """
+    ids = [int(g) for g in dict.fromkeys(game_ids)]
+    if not ids:
+        return {}
+    query = (
+        "SELECT game_id, timestamp, member_count FROM discord_snapshots "
+        "WHERE game_id IN (%s) ORDER BY game_id ASC, id DESC"
+        % ", ".join("?" for _ in ids)
+    )
+    conn = _connect()
+    try:
+        rows = conn.cursor().execute(query, list(ids)).fetchall()
+    finally:
+        conn.close()
+    out: dict = {gid: None for gid in ids}
+    for game_id, ts, member_count in rows:
+        if out[int(game_id)] is None:
+            out[int(game_id)] = {"timestamp": ts, "member_count": member_count}
+    return out
+
+
 def get_snapshots(game_id, hours=None, limit=None):
-    """Return snapshot rows for a game, newest first. `hours` filters the
+    """Return snapshot rows for a game, oldest first. `hours` filters the
     window (None = all retained), `limit` caps the row count."""
     conn = _connect()
     cursor = conn.cursor()
@@ -275,7 +428,9 @@ def get_snapshots(game_id, hours=None, limit=None):
     )
     params = [int(game_id)]
     if hours is not None:
-        cutoff = (datetime.utcnow() - timedelta(hours=hours)).isoformat(sep=" ")
+        cutoff = (
+            datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(hours=hours)
+        ).isoformat(sep=" ")
         query += " AND timestamp >= ?"
         params.append(cutoff)
     query += " ORDER BY timestamp ASC, id ASC"
