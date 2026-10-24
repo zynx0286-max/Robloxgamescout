@@ -10,6 +10,10 @@ COPY Roblox-Game-Scout-Bot/requirements.txt ./requirements.txt
 RUN pip install -r requirements.txt
 
 COPY Roblox-Game-Scout-Bot/ /app/
+# start.sh lives at the repo root, not inside the bot directory. Without this
+# copy the container exits immediately with "can't open start.sh".
+COPY start.sh ./start.sh
+RUN chmod +x ./start.sh
 
 EXPOSE 8000
 
