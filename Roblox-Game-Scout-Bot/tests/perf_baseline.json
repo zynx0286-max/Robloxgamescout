@@ -1,9 +1,9 @@
 {
   "recorded_via": "scripts/bench_bulk_reads.py --record",
   "phases": {
-    "growth": 183.21,
-    "velocity": 165.86,
-    "chart_rank": 30.24
+    "growth": 62.8,
+    "velocity": 35.41,
+    "chart_rank": 160.86
   },
-  "end_to_end": 139.79
+  "end_to_end": 55.18
 }
